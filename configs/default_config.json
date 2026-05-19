@@ -1,0 +1,68 @@
+{
+  "camera": {
+    "device_index": 0,
+    "width": 640,
+    "height": 480,
+    "fps": 30,
+    "mirror": false
+  },
+  "tracker": {
+    "backend": "opencv",
+    "min_area": 900,
+    "max_area_ratio": 0.45,
+    "blur_kernel": 5,
+    "morph_kernel": 5,
+    "hsv_ranges": [
+      {
+        "lower": [0, 120, 80],
+        "upper": [10, 255, 255]
+      },
+      {
+        "lower": [170, 120, 80],
+        "upper": [180, 255, 255]
+      }
+    ]
+  },
+  "control": {
+    "pan_center": 90.0,
+    "tilt_center": 90.0,
+    "pan_min": 20.0,
+    "pan_max": 160.0,
+    "tilt_min": 35.0,
+    "tilt_max": 145.0,
+    "deadzone_px": 35.0,
+    "pan_kp": 0.08,
+    "pan_ki": 0.002,
+    "pan_kd": 0.015,
+    "tilt_kp": 0.08,
+    "tilt_ki": 0.002,
+    "tilt_kd": 0.015,
+    "max_step_deg": 3.5,
+    "smoothing": 0.45
+  },
+  "state_machine": {
+    "lock_frames": 3,
+    "lost_frames": 5,
+    "search_after_seconds": 1.2,
+    "search_step_deg": 1.0,
+    "search_pan_span": 28.0
+  },
+  "logging": {
+    "enabled": true,
+    "log_dir": "logs"
+  },
+  "ui": {
+    "show_window": true,
+    "window_name": "OrangePi Tracker",
+    "draw_mask_preview": true
+  },
+  "hardware": {
+    "force_mock": false,
+    "i2c_address": 64,
+    "pan_channel": 1,
+    "tilt_channel": 0,
+    "frequency_hz": 50,
+    "min_pulse": 500,
+    "max_pulse": 2500
+  }
+}
