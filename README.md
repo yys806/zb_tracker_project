@@ -111,6 +111,18 @@ PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/py
 sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode track
 ```
 
+网页监控模式，适合 MobaXterm 远程调试：
+
+```bash
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode web
+```
+
+启动后在电脑浏览器打开终端打印的地址，通常类似：
+
+```text
+http://OrangePi_IP:5000
+```
+
 窗口中按 `q` 退出。
 
 ## 核心功能
@@ -123,6 +135,7 @@ sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/b
 - `IDLE`、`TRACKING`、`LOST_SHORT`、`SEARCH` 状态机
 - 目标丢失后小范围搜索重捕
 - 运行日志和 summary 输出
+- 网页 MJPEG 监控模式，远程查看叠加后的实时画面
 - C/C++ 形态学算子加速实验
 
 ## 硬件接线

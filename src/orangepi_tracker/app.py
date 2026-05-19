@@ -4,6 +4,7 @@ import os
 import time
 
 import cv2
+import numpy as np
 
 from .camera import OpenCVCamera
 from .config import AppConfig
@@ -84,6 +85,15 @@ class TrackingApplication:
         finally:
             self.close()
         return 0
+
+    def run_web(self, host: str, port: int, jpeg_quality: int) -> int:
+        self.config.ui.show_window = False
+        try:
+            from .web_server import run_mjpeg_server
+
+            return run_mjpeg_server(self, host=host, port=port, jpeg_quality=jpeg_quality)
+        finally:
+            self.close()
 
     def _reset_gimbal(self) -> None:
         self.controller.reset()
@@ -184,6 +194,81 @@ class TrackingApplication:
         elif state == TrackingState.LOST_SHORT and self.last_lost_started_at is None:
             self.summary.lost_events += 1
             self.last_lost_started_at = time.perf_counter()
+
+    def read_web_frame(self) -> tuple[bool, np.ndarray | None]:
+        loop_started = time.perf_counter()
+        ok, frame = self.camera.read()
+        if not ok:
+            print("摄像头读取失败")
+            return False, None
+
+        now = time.perf_counter()
+        dt = max(now - self.last_frame_time, 1.0 / max(self.config.camera.fps, 1))
+        self.last_frame_time = now
+
+        detect_start = time.perf_counter()
+        detection = self.tracker.detect(frame)
+        detect_ms = (time.perf_counter() - detect_start) * 1000.0
+
+        state = self.machine.update(detection.found, now)
+        control_output = None
+        control_start = time.perf_counter()
+
+        if state == TrackingState.TRACKING and detection.found:
+            self.was_searching = False
+            if not self._should_hold_lock(frame.shape[1], frame.shape[0], detection):
+                control_output = self.controller.update(frame.shape[1], frame.shape[0], detection.center_x, detection.center_y, dt)
+                self.hardware.move_to(control_output.next_pan, control_output.next_tilt)
+        elif state == TrackingState.SEARCH:
+            self._reset_hold_lock()
+            if not self.was_searching:
+                self._begin_search()
+                self.was_searching = True
+            else:
+                self._apply_search_motion()
+        else:
+            self.was_searching = False
+            if not detection.found:
+                self._reset_hold_lock()
+        control_ms = (time.perf_counter() - control_start) * 1000.0
+
+        fps = 1.0 / max(time.perf_counter() - loop_started, 1e-6)
+        err_x = control_output.err_x if control_output is not None else 0.0
+        err_y = control_output.err_y if control_output is not None else 0.0
+        self._update_summary(fps, detection, err_x, err_y, state)
+
+        if self.logger is not None:
+            self.logger.log_frame(
+                FrameMetrics(
+                    timestamp=time.time(),
+                    state=state.value,
+                    detect_time_ms=detect_ms,
+                    control_time_ms=control_ms,
+                    fps=fps,
+                    err_x=err_x,
+                    err_y=err_y,
+                    pan=self.controller.current_pan,
+                    tilt=self.controller.current_tilt,
+                    target_found=detection.found,
+                    area=detection.area,
+                    confidence=detection.confidence,
+                )
+            )
+
+        display = draw_overlay(
+            frame=frame,
+            detection=detection,
+            state=state.value,
+            pan=self.controller.current_pan,
+            tilt=self.controller.current_tilt,
+            fps=fps,
+            control=control_output,
+        )
+        if self.config.ui.draw_mask_preview and detection.mask is not None:
+            mask_bgr = cv2.cvtColor(detection.mask, cv2.COLOR_GRAY2BGR)
+            mask_bgr = cv2.resize(mask_bgr, (display.shape[1] // 4, display.shape[0] // 4))
+            display[0:mask_bgr.shape[0], 0:mask_bgr.shape[1]] = mask_bgr
+        return True, display
 
     def run_tracking(self) -> int:
         try:

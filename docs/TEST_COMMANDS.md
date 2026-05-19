@@ -251,7 +251,33 @@ cd ~/zb/tracker_project
 sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode track
 ```
 
-## 10. C/C++ 加速模块测试
+## 10. 网页监控模式
+
+如果你通过 MobaXterm 远程调试，不方便弹出 OpenCV 窗口，可以启动网页监控模式：
+
+```bash
+source ~/.venvs/zb/bin/activate
+cd ~/zb/tracker_project
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode web
+```
+
+终端会打印类似：
+
+```text
+Web monitor running: http://192.168.x.x:5000
+```
+
+在电脑浏览器打开这个地址即可看到叠加后的实时画面。退出时回到 MobaXterm，按 `Ctrl+C`。
+
+如果网页打不开，先检查电脑和 OrangePi 是否在同一网络，并确认防火墙没有拦截 `5000` 端口。
+
+也可以手动指定端口：
+
+```bash
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode web --web-port 8080
+```
+
+## 11. C/C++ 加速模块测试
 
 构建 C++ 扩展：
 
