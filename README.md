@@ -117,6 +117,12 @@ sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/b
 sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode web
 ```
 
+如果只想先确认网页画面和识别框，不想让舵机动作，先用模拟模式：
+
+```bash
+PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode web --simulate
+```
+
 启动后在电脑浏览器打开终端打印的地址，通常类似：
 
 ```text

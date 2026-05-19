@@ -261,6 +261,14 @@ cd ~/zb/tracker_project
 sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode web
 ```
 
+更稳的第一次测试方式是先用模拟模式，只看网页画面和识别框，不控制真实舵机：
+
+```bash
+source ~/.venvs/zb/bin/activate
+cd ~/zb/tracker_project
+PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode web --simulate
+```
+
 终端会打印类似：
 
 ```text
