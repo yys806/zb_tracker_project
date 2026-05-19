@@ -4,9 +4,9 @@
 
 ## 0. 约定
 
-- OrangePi 用户名示例：`zbwjy`
-- 项目目录：`/home/zbwjy/zb/tracker_project`
-- Python 虚拟环境：`/home/zbwjy/.venvs/zb`
+- OrangePi 用户名示例：`orangepi`
+- 项目目录：`/home/orangepi/zb/tracker_project`
+- Python 虚拟环境：`/home/orangepi/.venvs/zb`
 - PCA9685 I2C 总线：`/dev/i2c-1`
 - PCA9685 地址：`0x40`
 - 舵机通道：`0 = 俯仰 tilt`，`1 = 水平 pan`
@@ -96,7 +96,7 @@ PYTHONPATH=src python -c "import orangepi_tracker; print(orangepi_tracker)"
 预期输出路径应包含：
 
 ```text
-/home/zbwjy/zb/tracker_project/src/orangepi_tracker/__init__.py
+/home/orangepi/zb/tracker_project/src/orangepi_tracker/__init__.py
 ```
 
 运行单元测试：
@@ -118,7 +118,7 @@ ls /dev/i2c-*
 使用 Python 脚本扫描 I2C。项目里的脚本默认扫描 bus 1：
 
 ```bash
-sudo PYTHONPATH=src /home/zbwjy/.venvs/zb/bin/python tests/scan_i2c.py
+sudo PYTHONPATH=src /home/orangepi/.venvs/zb/bin/python tests/scan_i2c.py
 ```
 
 正常结果应能看到：
@@ -141,7 +141,7 @@ Found PCA9685 All-Call at 0x70
 低层 PCA9685 舵机测试：
 
 ```bash
-sudo /home/zbwjy/.venvs/zb/bin/python tests/pca_servo_test.py
+sudo /home/orangepi/.venvs/zb/bin/python tests/pca_servo_test.py
 ```
 
 正常现象：
@@ -153,7 +153,7 @@ sudo /home/zbwjy/.venvs/zb/bin/python tests/pca_servo_test.py
 主程序舵机测试：
 
 ```bash
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode servo-test
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode servo-test
 ```
 
 正常输出类似：
@@ -172,7 +172,7 @@ pan=90.0 tilt=90.0
 如果只有输出但舵机不动，执行硬件类诊断：
 
 ```bash
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python -c "from orangepi_tracker.config import load_config; from orangepi_tracker.hardware import create_hardware; c=load_config('configs/default_config.json'); h=create_hardware(c.hardware,c.control); print(type(h)); h.move_to(90,90)"
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python -c "from orangepi_tracker.config import load_config; from orangepi_tracker.hardware import create_hardware; c=load_config('configs/default_config.json'); h=create_hardware(c.hardware,c.control); print(type(h)); h.move_to(90,90)"
 ```
 
 正常应输出：
@@ -194,7 +194,7 @@ ls /dev/video*
 打开摄像头测试窗口：
 
 ```bash
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode camera-test
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode camera-test
 ```
 
 正常现象：
@@ -209,7 +209,7 @@ sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/pyt
 模拟模式只测试视觉识别和界面，不控制真实舵机：
 
 ```bash
-PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode track --simulate
+PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode track --simulate
 ```
 
 正常现象：
@@ -223,7 +223,7 @@ PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python m
 确认舵机和摄像头都正常后，再启动真实闭环：
 
 ```bash
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode track
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode track
 ```
 
 正常现象：
@@ -248,7 +248,7 @@ sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/pyt
 ```bash
 source ~/.venvs/zb/bin/activate
 cd ~/zb/tracker_project
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode track
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode track
 ```
 
 ## 10. C/C++ 加速模块测试
@@ -257,7 +257,7 @@ sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/pyt
 
 ```bash
 cd ~/zb/tracker_project/cpp_accel
-/home/zbwjy/.venvs/zb/bin/python setup.py build_ext --inplace
+/home/orangepi/.venvs/zb/bin/python setup.py build_ext --inplace
 ```
 
 回到项目根目录：
@@ -269,12 +269,5 @@ cd ~/zb/tracker_project
 运行性能对比：
 
 ```bash
-PYTHONPATH=src:cpp_accel /home/zbwjy/.venvs/zb/bin/python scripts/benchmark_morphology.py --config configs/default_config.json --frames 300
+PYTHONPATH=src:cpp_accel /home/orangepi/.venvs/zb/bin/python scripts/benchmark_morphology.py --config configs/default_config.json --frames 300
 ```
-
-报告中建议记录：
-
-- Python/OpenCV 版本平均耗时
-- C/C++ 扩展版本平均耗时
-- 加速比
-- 测试帧数和分辨率

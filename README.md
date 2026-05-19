@@ -90,25 +90,25 @@ python -c "import cv2; import smbus2; print('opencv and smbus2 ok')"
 摄像头测试：
 
 ```bash
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode camera-test
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode camera-test
 ```
 
 舵机测试：
 
 ```bash
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode servo-test
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode servo-test
 ```
 
 模拟跟踪，不控制真实舵机：
 
 ```bash
-PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode track --simulate
+PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode track --simulate
 ```
 
 真实闭环跟踪：
 
 ```bash
-sudo PYTHONPATH=/home/zbwjy/zb/tracker_project/src /home/zbwjy/.venvs/zb/bin/python main.py --mode track
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src /home/orangepi/.venvs/zb/bin/python main.py --mode track
 ```
 
 窗口中按 `q` 退出。
@@ -185,14 +185,14 @@ configs/default_config.json
 
 ```bash
 cd ~/zb/tracker_project/cpp_accel
-/home/zbwjy/.venvs/zb/bin/python setup.py build_ext --inplace
+/home/orangepi/.venvs/zb/bin/python setup.py build_ext --inplace
 ```
 
 运行对比：
 
 ```bash
 cd ~/zb/tracker_project
-PYTHONPATH=src:cpp_accel /home/zbwjy/.venvs/zb/bin/python scripts/benchmark_morphology.py --config configs/default_config.json --frames 300
+PYTHONPATH=src:cpp_accel /home/orangepi/.venvs/zb/bin/python scripts/benchmark_morphology.py --config configs/default_config.json --frames 300
 ```
 
 报告中可对比 Python/OpenCV 版本和 C/C++ 扩展版本的单帧平均耗时、总耗时和加速比。
