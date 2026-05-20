@@ -54,7 +54,7 @@ class GimbalController:
         if abs(err_y) < self.config.deadzone_px:
             err_y = 0.0
             self.tilt_axis.integral = 0.0
-            self.tilt_prev_error = 0.0
+            self.tilt_axis.prev_error = 0.0
         raw_pan = self.current_pan - self.pan_axis.update(err_x, dt)
         raw_tilt = self.current_tilt + self.tilt_axis.update(err_y, dt)
 
@@ -70,4 +70,3 @@ class GimbalController:
         self.current_pan = next_pan
         self.current_tilt = next_tilt
         return ControlOutput(next_pan=next_pan, next_tilt=next_tilt, err_x=err_x, err_y=err_y)
-

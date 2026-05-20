@@ -1,4 +1,6 @@
 numpy
 opencv-python
 pybind11
-
+pymp-pypi
+matplotlib
+wheel

@@ -152,10 +152,17 @@ class SmbusPanTiltHardware(PanTiltHardware):
 def create_hardware(hardware_cfg: HardwareConfig, control_cfg: ControlConfig, force_mock: bool = False) -> PanTiltHardware:
     if force_mock or hardware_cfg.force_mock:
         return MockPanTiltHardware(control_cfg)
+    smbus_error: Exception | None = None
     try:
         return SmbusPanTiltHardware(hardware_cfg, control_cfg, bus_id=1)
-    except Exception:
-        try:
-            return AdafruitPanTiltHardware(hardware_cfg, control_cfg)
-        except Exception:
-            return MockPanTiltHardware(control_cfg)
+    except Exception as exc:
+        smbus_error = exc
+
+    try:
+        return AdafruitPanTiltHardware(hardware_cfg, control_cfg)
+    except Exception as adafruit_error:
+        raise RuntimeError(
+            "real hardware initialization failed. "
+            "Use --simulate for mock mode, or check I2C/PCA9685 permissions and wiring. "
+            f"smbus error: {smbus_error}; adafruit error: {adafruit_error}"
+        ) from adafruit_error

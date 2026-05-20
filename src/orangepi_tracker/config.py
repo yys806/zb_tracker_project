@@ -1,8 +1,33 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+
+HsvRange = dict[str, list[int]]
+HsvPresetMap = dict[str, list[HsvRange]]
+
+
+def default_color_presets() -> HsvPresetMap:
+    return {
+        "red": [
+            {"lower": [0, 120, 80], "upper": [10, 255, 255]},
+            {"lower": [170, 120, 80], "upper": [180, 255, 255]},
+        ],
+        "blue": [
+            {"lower": [95, 90, 60], "upper": [130, 255, 255]},
+        ],
+        "green": [
+            {"lower": [40, 70, 60], "upper": [85, 255, 255]},
+        ],
+        "yellow": [
+            {"lower": [20, 90, 80], "upper": [38, 255, 255]},
+        ],
+        "custom": [
+            {"lower": [0, 80, 60], "upper": [180, 255, 255]},
+        ],
+    }
 
 
 @dataclass(slots=True)
@@ -21,7 +46,9 @@ class TrackerConfig:
     max_area_ratio: float
     blur_kernel: int
     morph_kernel: int
-    hsv_ranges: list[dict[str, list[int]]]
+    hsv_ranges: list[HsvRange]
+    color_name: str = "red"
+    color_presets: HsvPresetMap = field(default_factory=default_color_presets)
 
 
 @dataclass(slots=True)
@@ -99,3 +126,8 @@ def load_config(path: str | Path) -> AppConfig:
         hardware=HardwareConfig(**raw["hardware"]),
     )
 
+
+def save_config(config: AppConfig, path: str | Path) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(asdict(config), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

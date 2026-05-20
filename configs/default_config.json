@@ -12,6 +12,43 @@
     "max_area_ratio": 0.45,
     "blur_kernel": 5,
     "morph_kernel": 5,
+    "color_name": "red",
+    "color_presets": {
+      "red": [
+        {
+          "lower": [0, 120, 80],
+          "upper": [10, 255, 255]
+        },
+        {
+          "lower": [170, 120, 80],
+          "upper": [180, 255, 255]
+        }
+      ],
+      "blue": [
+        {
+          "lower": [95, 90, 60],
+          "upper": [130, 255, 255]
+        }
+      ],
+      "green": [
+        {
+          "lower": [40, 70, 60],
+          "upper": [85, 255, 255]
+        }
+      ],
+      "yellow": [
+        {
+          "lower": [20, 90, 80],
+          "upper": [38, 255, 255]
+        }
+      ],
+      "custom": [
+        {
+          "lower": [0, 80, 60],
+          "upper": [180, 255, 255]
+        }
+      ]
+    },
     "hsv_ranges": [
       {
         "lower": [0, 120, 80],

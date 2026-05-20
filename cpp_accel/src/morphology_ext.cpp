@@ -20,7 +20,9 @@ void erode_once(const std::uint8_t* src, std::uint8_t* dst, int height, int widt
                 const int yy = y + ky;
                 for (int kx = -radius; kx <= radius; ++kx) {
                     const int xx = x + kx;
-                    if (yy < 0 || yy >= height || xx < 0 || xx >= width || src[yy * width + xx] == 0) {
+                    // Match OpenCV's morphology default: outside pixels do not
+                    // shrink a white object during erosion.
+                    if (0 <= yy && yy < height && 0 <= xx && xx < width && src[yy * width + xx] == 0) {
                         keep = 0;
                         break;
                     }

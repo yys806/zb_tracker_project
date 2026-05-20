@@ -45,24 +45,30 @@ class PCA9685Driver:
         off_val = int(102 + (angle / 180.0) * (512 - 102))
         self.set_pwm(channel, 0, off_val)
 
+    def close(self):
+        self.bus.close()
+
 def run_test():
     try:
         # Using I2C bus 1 and PCA9685 at 0x40
         servo = PCA9685Driver(bus_number=1, address=0x40)
         print("--- PCA9685 Low-Level Test Started (using smbus2) ---")
-        print("Moving Channel 0 and 1. Press Ctrl+C to stop.")
-        
-        while True:
-            for angle in [0, 90, 180, 90]:
-                print(f"Current Target: {angle} degrees")
-                servo.set_angle(0, angle)
-                servo.set_angle(1, angle)
-                time.sleep(1)
+        print("Moving Channel 0 and 1 through safe angles once.")
+
+        for angle in [90, 75, 105, 90]:
+            print(f"Current Target: {angle} degrees")
+            servo.set_angle(0, angle)
+            servo.set_angle(1, angle)
+            time.sleep(1)
+
+        print("Low-level servo test finished.")
+        servo.close()
                 
     except KeyboardInterrupt:
         print("\nTest finished.")
     except Exception as e:
         print(f"\nError occurred: {e}")
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     run_test()

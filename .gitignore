@@ -11,6 +11,8 @@ dist/
 venv/
 .pytest_cache/
 logs/
+benchmark_results/
+cloud_uploads/
 *.log
 python
 .DS_Store

@@ -25,13 +25,14 @@ class TrackingLogger:
 
     def write_summary(self, summary: RunSummary) -> None:
         frames = max(summary.frames, 1)
+        found_frames = max(summary.found_frames, 1)
         payload = {
             "frames": summary.frames,
             "found_frames": summary.found_frames,
             "found_ratio": summary.found_frames / frames,
             "avg_fps": summary.total_fps / frames,
-            "avg_abs_err_x": summary.total_abs_err_x / frames,
-            "avg_abs_err_y": summary.total_abs_err_y / frames,
+            "avg_abs_err_x": summary.total_abs_err_x / found_frames,
+            "avg_abs_err_y": summary.total_abs_err_y / found_frames,
             "max_abs_err_x": summary.max_abs_err_x,
             "max_abs_err_y": summary.max_abs_err_y,
             "lost_events": summary.lost_events,
@@ -43,4 +44,26 @@ class TrackingLogger:
 
     def close(self) -> None:
         self.csv_file.close()
+        self._restore_sudo_owner()
 
+    def _restore_sudo_owner(self) -> None:
+        sudo_uid = os.environ.get("SUDO_UID")
+        sudo_gid = os.environ.get("SUDO_GID")
+        if not sudo_uid or not sudo_gid or not hasattr(os, "chown"):
+            return
+        try:
+            uid = int(sudo_uid)
+            gid = int(sudo_gid)
+        except ValueError:
+            return
+
+        for root, dirs, files in os.walk(self.run_dir):
+            for name in dirs + files:
+                try:
+                    os.chown(os.path.join(root, name), uid, gid)
+                except OSError:
+                    pass
+        try:
+            os.chown(self.run_dir, uid, gid)
+        except OSError:
+            pass
