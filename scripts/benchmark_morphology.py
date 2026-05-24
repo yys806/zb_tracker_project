@@ -76,13 +76,16 @@ def build_masks(frames: int, width: int, height: int) -> list[np.ndarray]:
     return masks
 
 
-def measure(fn: MorphFn, masks: list[np.ndarray], kernel_size: int) -> tuple[float, float, np.ndarray]:
+def measure(fn: MorphFn, masks: list[np.ndarray], kernel_size: int) -> tuple[float, float, np.ndarray, list[float]]:
     start = time.perf_counter()
     last = masks[0]
+    frame_times: list[float] = []
     for mask in masks:
+        frame_start = time.perf_counter()
         last = fn(mask, kernel_size)
+        frame_times.append((time.perf_counter() - frame_start) * 1000.0)
     total_ms = (time.perf_counter() - start) * 1000.0
-    return total_ms / len(masks), total_ms, last
+    return total_ms / len(masks), total_ms, last, frame_times
 
 
 def run_backend(
@@ -92,9 +95,9 @@ def run_backend(
     kernel_size: int,
     reference: np.ndarray,
     python_avg_ms: float | None,
-) -> BackendResult:
+):
     try:
-        avg_ms, total_ms, result = measure(fn, masks, kernel_size)
+        avg_ms, total_ms, result, frame_times = measure(fn, masks, kernel_size)
     except Exception as exc:
         return BackendResult(
             backend=name,
@@ -104,7 +107,7 @@ def run_backend(
             speedup_vs_python=None,
             matches_opencv=None,
             error=str(exc),
-        )
+        ), []
 
     speedup = (python_avg_ms / avg_ms) if python_avg_ms is not None and avg_ms > 0 else None
     return BackendResult(
@@ -114,14 +117,15 @@ def run_backend(
         total_ms=total_ms,
         speedup_vs_python=speedup,
         matches_opencv=bool(np.array_equal(result, reference)),
-    )
+    ), frame_times
 
 
-def save_results(output_dir: str, payload: dict, rows: list[BackendResult]) -> None:
+def save_results(output_dir: str, payload: dict, rows: list[BackendResult], frame_table: dict[str, list[float]]) -> None:
     os.makedirs(output_dir, exist_ok=True)
     json_path = os.path.join(output_dir, "morphology_benchmark.json")
     csv_path = os.path.join(output_dir, "morphology_benchmark.csv")
     md_path = os.path.join(output_dir, "morphology_benchmark.md")
+    detail_csv_path = os.path.join(output_dir, "morphology_benchmark_frames.csv")
 
     with open(json_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
@@ -134,6 +138,18 @@ def save_results(output_dir: str, payload: dict, rows: list[BackendResult]) -> N
         writer.writeheader()
         for row in rows:
             writer.writerow(asdict(row))
+
+    with open(detail_csv_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        backends = [row.backend for row in rows if row.available]
+        writer.writerow(["frame_index", *backends])
+        frame_count = max((len(times) for times in frame_table.values()), default=0)
+        for frame_index in range(frame_count):
+            row = [frame_index]
+            for backend in backends:
+                times = frame_table.get(backend, [])
+                row.append("" if frame_index >= len(times) else f"{times[frame_index]:.6f}")
+            writer.writerow(row)
 
     with open(md_path, "w", encoding="utf-8") as fh:
         fh.write("# Morphology Benchmark\n\n")
@@ -151,6 +167,7 @@ def save_results(output_dir: str, payload: dict, rows: list[BackendResult]) -> N
 
     print(f"Saved benchmark JSON: {json_path}")
     print(f"Saved benchmark CSV:  {csv_path}")
+    print(f"Saved benchmark frame CSV: {detail_csv_path}")
     print(f"Saved benchmark MD:   {md_path}")
 
 
@@ -166,7 +183,8 @@ def main() -> int:
     kernel_size = config.tracker.morph_kernel
 
     masks = build_masks(frames, width, height)
-    opencv_avg_ms, opencv_total_ms, opencv_reference = measure(opencv_open_close, masks, kernel_size)
+    opencv_avg_ms, opencv_total_ms, opencv_reference, opencv_frames = measure(opencv_open_close, masks, kernel_size)
+    frame_table: dict[str, list[float]] = {"opencv": opencv_frames}
 
     rows: list[BackendResult] = [
         BackendResult(
@@ -181,17 +199,20 @@ def main() -> int:
 
     python_avg_ms: float | None = None
     if not args.skip_python:
-        python_row = run_backend("python", pure_python_open_close, masks, kernel_size, opencv_reference, None)
+        python_row, python_frames = run_backend("python", pure_python_open_close, masks, kernel_size, opencv_reference, None)
         rows.append(python_row)
+        frame_table["python"] = python_frames
         if python_row.available:
             python_avg_ms = python_row.avg_ms
 
-    cpp_row = run_backend("cpp_whl", cpp_open_close, masks, kernel_size, opencv_reference, python_avg_ms)
+    cpp_row, cpp_frames = run_backend("cpp_whl", cpp_open_close, masks, kernel_size, opencv_reference, python_avg_ms)
     rows.append(cpp_row)
+    frame_table["cpp_whl"] = cpp_frames
 
     if args.include_pymp:
-        pymp_row = run_backend("pymp", pymp_open_close, masks, kernel_size, opencv_reference, python_avg_ms)
+        pymp_row, pymp_frames = run_backend("pymp", pymp_open_close, masks, kernel_size, opencv_reference, python_avg_ms)
         rows.append(pymp_row)
+        frame_table["pymp"] = pymp_frames
 
     if python_avg_ms is not None:
         for row in rows:
@@ -205,8 +226,9 @@ def main() -> int:
         "height": height,
         "kernel_size": kernel_size,
         "results": [asdict(row) for row in rows],
+        "frame_times": frame_table,
     }
-    save_results(args.output_dir, payload, rows)
+    save_results(args.output_dir, payload, rows, frame_table)
 
     print("\nBenchmark results")
     for row in rows:

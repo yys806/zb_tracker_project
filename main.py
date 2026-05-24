@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--web-host", default="0.0.0.0", help="网页监控绑定地址")
     parser.add_argument("--web-port", type=int, default=5000, help="网页监控端口")
     parser.add_argument("--web-jpeg-quality", type=int, default=70, help="网页视频 JPEG 质量")
-    parser.add_argument("--web-fps", type=float, default=12.0, help="网页视频推流帧率")
+    parser.add_argument("--web-fps", type=float, default=30.0, help="网页视频推流帧率")
     return parser.parse_args()
 
 

@@ -8,19 +8,19 @@
   },
   "tracker": {
     "backend": "opencv",
-    "min_area": 900,
+    "min_area": 420,
     "max_area_ratio": 0.45,
     "blur_kernel": 5,
-    "morph_kernel": 5,
-    "color_name": "red",
+    "morph_kernel": 3,
+    "color_name": "custom",
     "color_presets": {
       "red": [
         {
-          "lower": [0, 120, 80],
-          "upper": [10, 255, 255]
+          "lower": [0, 70, 45],
+          "upper": [15, 255, 255]
         },
         {
-          "lower": [170, 120, 80],
+          "lower": [165, 70, 45],
           "upper": [180, 255, 255]
         }
       ],
@@ -44,21 +44,33 @@
       ],
       "custom": [
         {
-          "lower": [0, 80, 60],
+          "lower": [0, 40, 35],
           "upper": [180, 255, 255]
         }
       ]
     },
     "hsv_ranges": [
       {
-        "lower": [0, 120, 80],
-        "upper": [10, 255, 255]
-      },
-      {
-        "lower": [170, 120, 80],
+        "lower": [0, 40, 35],
         "upper": [180, 255, 255]
       }
-    ]
+    ],
+    "red_dominance_enabled": true,
+    "red_min_channel": 70,
+    "red_margin": 28,
+    "detection_smoothing": 0.55,
+    "selection_inertia_px": 80.0,
+    "min_rect_fill_ratio": 0.58,
+    "max_jump_px": 100.0,
+    "jump_reject_area_ratio": 2.2,
+    "target_aspect_min": 0.65,
+    "target_aspect_max": 1.45,
+    "lost_hold_frames": 5,
+    "held_confidence_decay": 0.65,
+    "adaptive_hsv_enabled": false,
+    "adaptive_hsv_alpha": 0.06,
+    "adaptive_hue_margin": 18,
+    "adaptive_sv_margin": 105
   },
   "control": {
     "pan_center": 90.0,
@@ -67,22 +79,38 @@
     "pan_max": 160.0,
     "tilt_min": 35.0,
     "tilt_max": 145.0,
-    "deadzone_px": 35.0,
-    "pan_kp": 0.08,
-    "pan_ki": 0.002,
-    "pan_kd": 0.015,
-    "tilt_kp": 0.08,
-    "tilt_ki": 0.002,
-    "tilt_kd": 0.015,
-    "max_step_deg": 3.5,
-    "smoothing": 0.45
+    "deadzone_px": 20.0,
+    "pan_kp": 0.035,
+    "pan_ki": 0.0,
+    "pan_kd": 0.0,
+    "tilt_kp": 0.16,
+    "tilt_ki": 0.0,
+    "tilt_kd": 0.0,
+    "max_step_deg": 9.0,
+    "smoothing": 0.15,
+    "servo_min_delta_deg": 0.25,
+    "pan_max_step_deg": 4.0,
+    "tilt_max_step_deg": 5.0,
+    "pan_smoothing": 0.35,
+    "tilt_smoothing": 0.22,
+    "pan_deadzone_px": 42.0,
+    "tilt_deadzone_px": 18.0,
+    "pan_min_delta_deg": 0.6,
+    "tilt_min_delta_deg": 0.25,
+    "tilt_hold_enter_px": 24.0,
+    "tilt_hold_release_px": 36.0,
+    "tilt_settle_frames": 3,
+    "tilt_settle_release_px": 70.0,
+    "pan_direction": -1.0,
+    "tilt_direction": 1.0
   },
   "state_machine": {
     "lock_frames": 3,
     "lost_frames": 5,
     "search_after_seconds": 1.2,
     "search_step_deg": 1.0,
-    "search_pan_span": 28.0
+    "search_pan_span": 28.0,
+    "enable_search": false
   },
   "logging": {
     "enabled": true,
@@ -100,6 +128,11 @@
     "tilt_channel": 0,
     "frequency_hz": 50,
     "min_pulse": 500,
-    "max_pulse": 2500
+    "max_pulse": 2500,
+    "center_on_start": false,
+    "release_on_start": true,
+    "release_on_shutdown": false,
+    "reset_step_deg": 1.2,
+    "reset_step_delay_s": 0.045
   }
 }

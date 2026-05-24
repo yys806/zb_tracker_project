@@ -7,7 +7,7 @@ BACKEND=""
 HOST="0.0.0.0"
 PORT="5000"
 JPEG="60"
-FPS="10"
+FPS="30"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -28,7 +28,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --fps)
-      FPS="${2:-10}"
+      FPS="${2:-30}"
       shift 2
       ;;
     *)
@@ -40,6 +40,7 @@ done
 
 cd "$PROJECT_ROOT"
 ensure_output_dirs
+stop_existing_web_server "$PORT"
 
 ARGS=(--mode web --web-host "$HOST" --web-port "$PORT" --web-jpeg-quality "$JPEG" --web-fps "$FPS")
 if [ -n "$BACKEND" ]; then

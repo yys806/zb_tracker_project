@@ -18,10 +18,11 @@ from .tracker import HSVColorTracker
 from .types import FrameMetrics, RunSummary, TargetDetection
 
 
-LOCK_HOLD_STABLE_FRAMES = 8
+LOCK_HOLD_STABLE_FRAMES = 3
 LOCK_HOLD_CENTER_FACTOR = 2.0
-LOCK_HOLD_RELEASE_PX = 55.0
-LOCK_HOLD_MOTION_PX = 10.0
+LOCK_HOLD_RELEASE_PX = 22.0
+LOCK_HOLD_MOTION_PX = 6.0
+SERVO_MOVE_EPSILON_DEG = 1e-4
 
 
 class TrackingApplication:
@@ -47,6 +48,8 @@ class TrackingApplication:
         self.previous_detection_center: tuple[int, int] | None = None
         self.last_lost_started_at: float | None = None
         self.lock = threading.RLock()
+        self.tracking_enabled = False
+        self.color_ready = False
         self.emergency_stop = False
         self.last_raw_frame: np.ndarray | None = None
         self.last_detection = TargetDetection(found=False)
@@ -56,11 +59,13 @@ class TrackingApplication:
         self.last_control_ms = 0.0
         self.last_err_x = 0.0
         self.last_err_y = 0.0
-        self.last_message = "ready"
+        self.last_message = "put the target in the center, calibrate, then click start tracking"
+        self._last_console_status: dict | None = None
 
     def close(self) -> None:
         try:
-            if not isinstance(self.hardware, MockPanTiltHardware) and not self.emergency_stop:
+            should_center = False
+            if not isinstance(self.hardware, MockPanTiltHardware) and not self.emergency_stop and should_center:
                 self.center_gimbal()
         except Exception:
             pass
@@ -114,13 +119,23 @@ class TrackingApplication:
         finally:
             self.close()
 
-    def _reset_gimbal(self) -> None:
-        self.controller.reset()
+    def _reset_gimbal(self, settle: bool = False) -> None:
+        target_pan = self.config.control.pan_center
+        target_tilt = self.config.control.tilt_center
         self.search_direction = 1.0
         self.search_tilt_direction = 1.0
-        self.search_origin = self.config.control.pan_center
-        self.search_tilt_origin = self.config.control.tilt_center
-        self.hardware.move_to(self.controller.current_pan, self.controller.current_tilt)
+        self.search_origin = target_pan
+        self.search_tilt_origin = target_tilt
+        if settle:
+            self.hardware.ramp_to(
+                target_pan,
+                target_tilt,
+                step_deg=self.config.hardware.reset_step_deg,
+                delay_s=self.config.hardware.reset_step_delay_s,
+            )
+        else:
+            self.hardware.move_to(target_pan, target_tilt)
+        self.controller.reset()
 
     def center_gimbal(self) -> None:
         with self.lock:
@@ -129,29 +144,60 @@ class TrackingApplication:
             self.emergency_stop = was_stopped
             self.last_message = "gimbal centered"
 
+    def reset_gimbal(self) -> dict:
+        with self.lock:
+            self.tracking_enabled = False
+            self.emergency_stop = True
+            self._reset_state_machine()
+            self._reset_hold_lock()
+            self.hardware.release()
+            time.sleep(0.08)
+            self._reset_gimbal(settle=True)
+            time.sleep(0.12)
+            self.hardware.release()
+            self.last_message = "reset: emergency stop enabled and gimbal moved to initial position"
+            return self.get_console_status()
+
     def stop_motion(self) -> None:
         with self.lock:
+            self.tracking_enabled = False
             self.emergency_stop = True
+            self._reset_state_machine()
             self._reset_hold_lock()
             self.last_message = "emergency stop enabled"
 
-    def resume_motion(self) -> None:
+    def start_tracking(self) -> dict:
         with self.lock:
+            if not self.color_ready:
+                raise ValueError("select a color or calibrate HSV before starting tracking")
+            self.tracking_enabled = True
             self.emergency_stop = False
-            self.last_message = "tracking resumed"
+            self._reset_state_machine()
+            self._reset_hold_lock()
+            self._prime_hold_lock_from_last_detection()
+            self.last_message = "tracking started"
+            return self.get_console_status()
 
     def set_color(self, color_name: str) -> dict:
         with self.lock:
             self.tracker.set_color(color_name)
+            self.color_ready = True
+            self.tracking_enabled = False
+            self.emergency_stop = False
+            self._reset_state_machine()
             self._reset_hold_lock()
-            self.last_message = f"color preset switched to {color_name}"
+            self.last_message = f"color preset switched to {color_name}; click start tracking"
             return self.get_console_status()
 
     def set_hsv_ranges(self, ranges: list[dict[str, list[int]]]) -> dict:
         with self.lock:
             self.tracker.set_hsv_ranges(ranges, color_name="custom")
+            self.color_ready = True
+            self.tracking_enabled = False
+            self.emergency_stop = False
+            self._reset_state_machine()
             self._reset_hold_lock()
-            self.last_message = "custom HSV range updated"
+            self.last_message = "custom HSV range updated; click start tracking"
             return self.get_console_status()
 
     def calibrate_color(self) -> dict:
@@ -159,8 +205,12 @@ class TrackingApplication:
             if self.last_raw_frame is None:
                 raise ValueError("no camera frame available for calibration")
             self.tracker.calibrate_from_frame(self.last_raw_frame)
+            self.color_ready = True
+            self.tracking_enabled = False
+            self.emergency_stop = False
+            self._reset_state_machine()
             self._reset_hold_lock()
-            self.last_message = "HSV calibrated from center ROI"
+            self.last_message = "auto calibrated from center target; click start tracking"
             return self.get_console_status()
 
     def save_runtime_config(self) -> dict:
@@ -178,54 +228,112 @@ class TrackingApplication:
             self.last_message = f"config saved to {self.config_path}"
             return self.get_console_status()
 
+    def _build_console_status_unlocked(self) -> dict:
+        detection = self.last_detection
+        return {
+            "state": self.last_state.value,
+            "fps": round(self.last_fps, 2),
+            "detect_time_ms": round(self.last_detect_ms, 2),
+            "control_time_ms": round(self.last_control_ms, 2),
+            "err_x": round(self.last_err_x, 2),
+            "err_y": round(self.last_err_y, 2),
+            "pan": round(self.controller.current_pan, 2),
+            "tilt": round(self.controller.current_tilt, 2),
+            "target_found": detection.found,
+            "area": round(detection.area, 2),
+            "confidence": round(detection.confidence, 3),
+            "bbox": detection.bbox,
+            "color_name": self.tracker.color_name,
+            "available_colors": self.tracker.available_colors(),
+            "hsv_ranges": self.tracker.hsv_ranges,
+            "adaptive_hsv_enabled": self.config.tracker.adaptive_hsv_enabled,
+            "backend": self.config.tracker.backend,
+            "tracking_enabled": self.tracking_enabled,
+            "color_ready": self.color_ready,
+            "emergency_stop": self.emergency_stop,
+            "hardware": "mock" if isinstance(self.hardware, MockPanTiltHardware) else "real",
+            "message": self.last_message,
+            "summary": {
+                "frames": self.summary.frames,
+                "found_frames": self.summary.found_frames,
+                "lost_events": self.summary.lost_events,
+            },
+        }
+
     def get_console_status(self) -> dict:
-        with self.lock:
-            detection = self.last_detection
+        acquired = self.lock.acquire(timeout=0.05)
+        if not acquired:
+            if self._last_console_status is not None:
+                status = dict(self._last_console_status)
+                status["stale"] = True
+                return status
             return {
                 "state": self.last_state.value,
-                "fps": round(self.last_fps, 2),
-                "detect_time_ms": round(self.last_detect_ms, 2),
-                "control_time_ms": round(self.last_control_ms, 2),
-                "err_x": round(self.last_err_x, 2),
-                "err_y": round(self.last_err_y, 2),
+                "fps": 0.0,
+                "detect_time_ms": 0.0,
+                "control_time_ms": 0.0,
+                "err_x": 0.0,
+                "err_y": 0.0,
                 "pan": round(self.controller.current_pan, 2),
                 "tilt": round(self.controller.current_tilt, 2),
-                "target_found": detection.found,
-                "area": round(detection.area, 2),
-                "confidence": round(detection.confidence, 3),
-                "bbox": detection.bbox,
+                "target_found": False,
+                "area": 0.0,
+                "confidence": 0.0,
+                "bbox": None,
                 "color_name": self.tracker.color_name,
                 "available_colors": self.tracker.available_colors(),
                 "hsv_ranges": self.tracker.hsv_ranges,
+                "adaptive_hsv_enabled": self.config.tracker.adaptive_hsv_enabled,
                 "backend": self.config.tracker.backend,
+                "tracking_enabled": self.tracking_enabled,
+                "color_ready": self.color_ready,
                 "emergency_stop": self.emergency_stop,
                 "hardware": "mock" if isinstance(self.hardware, MockPanTiltHardware) else "real",
-                "message": self.last_message,
-                "summary": {
-                    "frames": self.summary.frames,
-                    "found_frames": self.summary.found_frames,
-                    "lost_events": self.summary.lost_events,
-                },
+                "message": "status snapshot is temporarily busy",
+                "summary": {"frames": 0, "found_frames": 0, "lost_events": 0},
+                "stale": True,
             }
+        try:
+            status = self._build_console_status_unlocked()
+            status["stale"] = False
+            self._last_console_status = status
+            return status
+        finally:
+            self.lock.release()
 
     def _process_frame(self, frame: np.ndarray, dt: float) -> tuple[TargetDetection, TrackingState, object | None, float, float, float, float]:
         detect_start = time.perf_counter()
-        detection = self.tracker.detect(frame)
+        detection = self.tracker.detect(frame) if self.color_ready else TargetDetection(found=False)
         detect_ms = (time.perf_counter() - detect_start) * 1000.0
 
-        state = self.machine.update(detection.found, time.perf_counter())
         control_output = None
         control_start = time.perf_counter()
 
-        if self.emergency_stop:
+        if not self.tracking_enabled or self.emergency_stop:
+            state = TrackingState.IDLE
             self.was_searching = False
+            self._reset_state_machine()
             self._reset_hold_lock()
-        elif state == TrackingState.TRACKING and detection.found:
+        else:
+            state = self.machine.update(detection.found, time.perf_counter())
+
+        if self.tracking_enabled and not self.emergency_stop and detection.found:
             self.was_searching = False
             if not self._should_hold_lock(frame.shape[1], frame.shape[0], detection):
+                before_pan = self.controller.current_pan
+                before_tilt = self.controller.current_tilt
                 control_output = self.controller.update(frame.shape[1], frame.shape[0], detection.center_x, detection.center_y, dt)
-                self.hardware.move_to(control_output.next_pan, control_output.next_tilt)
-        elif state == TrackingState.SEARCH:
+                if (
+                    abs(control_output.next_pan - before_pan) > SERVO_MOVE_EPSILON_DEG
+                    or abs(control_output.next_tilt - before_tilt) > SERVO_MOVE_EPSILON_DEG
+                ):
+                    self.hardware.move_to(control_output.next_pan, control_output.next_tilt)
+        elif (
+            self.config.state_machine.enable_search
+            and self.tracking_enabled
+            and not self.emergency_stop
+            and state == TrackingState.SEARCH
+        ):
             self._reset_hold_lock()
             if detection.found:
                 self.was_searching = False
@@ -249,10 +357,18 @@ class TrackingApplication:
         return detection, state, control_output, detect_ms, control_ms, err_x, err_y
 
     def _render_display(self, frame: np.ndarray, detection: TargetDetection, state: TrackingState, fps: float, control_output) -> np.ndarray:
+        if self.emergency_stop:
+            state_label = f"{state.value} | STOP"
+        elif not self.color_ready:
+            state_label = f"{state.value} | SELECT_COLOR"
+        elif not self.tracking_enabled:
+            state_label = f"{state.value} | READY"
+        else:
+            state_label = state.value
         display = draw_overlay(
             frame=frame,
             detection=detection,
-            state=f"{state.value}{' | STOP' if self.emergency_stop else ''}",
+            state=state_label,
             pan=self.controller.current_pan,
             tilt=self.controller.current_tilt,
             fps=fps,
@@ -359,18 +475,55 @@ class TrackingApplication:
         self.hold_center = None
         self.previous_detection_center = None
 
+    def _reset_state_machine(self) -> None:
+        self.machine.state = TrackingState.IDLE
+        self.machine.found_streak = 0
+        self.machine.lost_streak = 0
+        self.machine.lost_started_at = None
+        self.was_searching = False
+
+    def _prime_hold_lock_from_last_detection(self) -> None:
+        if self.last_raw_frame is None or not self.last_detection.found:
+            return
+        frame_height, frame_width = self.last_raw_frame.shape[:2]
+        detection = self.last_detection
+        frame_center_x = frame_width / 2.0
+        frame_center_y = frame_height / 2.0
+        err_x = abs(detection.center_x - frame_center_x)
+        err_y = abs(detection.center_y - frame_center_y)
+        pan_deadzone = self.config.control.pan_deadzone_px if self.config.control.pan_deadzone_px is not None else self.config.control.deadzone_px
+        tilt_deadzone = self.config.control.tilt_deadzone_px if self.config.control.tilt_deadzone_px is not None else self.config.control.deadzone_px
+        if err_x <= pan_deadzone and err_y <= tilt_deadzone:
+            center = (detection.center_x, detection.center_y)
+            self.hold_locked = True
+            self.hold_stable_frames = LOCK_HOLD_STABLE_FRAMES
+            self.hold_center = center
+            self.previous_detection_center = center
+            self.controller.pan_axis.integral = 0.0
+            self.controller.pan_axis.prev_error = 0.0
+            self.controller.tilt_axis.integral = 0.0
+            self.controller.tilt_axis.prev_error = 0.0
+
     def _should_hold_lock(self, frame_width: int, frame_height: int, detection: TargetDetection) -> bool:
         center = (detection.center_x, detection.center_y)
         frame_center_x = frame_width / 2.0
         frame_center_y = frame_height / 2.0
         err_x = abs(detection.center_x - frame_center_x)
         err_y = abs(detection.center_y - frame_center_y)
+        pan_deadzone = self.config.control.pan_deadzone_px if self.config.control.pan_deadzone_px is not None else self.config.control.deadzone_px
+        tilt_deadzone = self.config.control.tilt_deadzone_px if self.config.control.tilt_deadzone_px is not None else self.config.control.deadzone_px
+        enter_x = max(6.0, float(pan_deadzone))
+        enter_y = max(6.0, float(tilt_deadzone))
+        release_x = enter_x + max(10.0, enter_x * 0.28)
+        release_y = enter_y + max(10.0, enter_y * 0.45)
 
         if self.hold_locked:
             assert self.hold_center is not None
             moved_x = abs(center[0] - self.hold_center[0])
             moved_y = abs(center[1] - self.hold_center[1])
-            if moved_x > LOCK_HOLD_RELEASE_PX or moved_y > LOCK_HOLD_RELEASE_PX:
+            motion_release_x = max(LOCK_HOLD_RELEASE_PX, release_x * 0.65)
+            motion_release_y = max(LOCK_HOLD_RELEASE_PX, release_y * 0.65)
+            if moved_x > motion_release_x or moved_y > motion_release_y or err_x > release_x or err_y > release_y:
                 self._reset_hold_lock()
                 self.previous_detection_center = center
                 return False
@@ -384,9 +537,10 @@ class TrackingApplication:
             motion_y = abs(center[1] - self.previous_detection_center[1])
         self.previous_detection_center = center
 
-        center_limit = self.config.control.deadzone_px * LOCK_HOLD_CENTER_FACTOR
-        near_center = err_x <= center_limit and err_y <= center_limit
-        barely_moving = motion_x <= LOCK_HOLD_MOTION_PX and motion_y <= LOCK_HOLD_MOTION_PX
+        motion_limit_x = max(LOCK_HOLD_MOTION_PX, enter_x * 0.18)
+        motion_limit_y = max(LOCK_HOLD_MOTION_PX, enter_y * 0.22)
+        near_center = err_x <= enter_x and err_y <= enter_y
+        barely_moving = motion_x <= motion_limit_x and motion_y <= motion_limit_y
 
         if near_center and barely_moving:
             self.hold_stable_frames += 1

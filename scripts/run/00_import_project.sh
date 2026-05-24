@@ -30,9 +30,12 @@ if [ -z "$ZIP_PATH" ]; then
   for candidate in \
     "$HOME/下载"/v*.zip \
     "$HOME/Downloads"/v*.zip \
+    "$HOME/Download"/v*.zip \
+    "$HOME"/v*.zip \
     "$HOME/下载"/tracker_project*.zip \
     "$HOME/Downloads"/tracker_project*.zip \
-    "$HOME"/v*.zip; do
+    "$HOME/Download"/tracker_project*.zip \
+    "$HOME"/tracker_project*.zip; do
     if [ -f "$candidate" ]; then
       ZIP_PATH="$candidate"
       break
@@ -41,7 +44,7 @@ if [ -z "$ZIP_PATH" ]; then
 fi
 
 if [ -z "$ZIP_PATH" ] || [ ! -f "$ZIP_PATH" ]; then
-  echo "[00] 没找到压缩包，请用 --zip 指定路径"
+  echo "[00] package not found; pass it with --zip /path/to/v28.zip"
   exit 1
 fi
 
@@ -54,15 +57,15 @@ cd "$PARENT_DIR"
 if [ -d "$TARGET_NAME" ]; then
   if [ "$BACKUP" -eq 1 ]; then
     BACKUP_NAME="${TARGET_NAME}_backup_$(date +%Y%m%d_%H%M%S)"
-    echo "[00] 旧项目改名: $BACKUP_NAME"
+    echo "[00] backup old project as: $BACKUP_NAME"
     mv "$TARGET_NAME" "$BACKUP_NAME"
   else
-    echo "[00] 删除旧项目: $TARGET_NAME"
+    echo "[00] remove old project: $TARGET_NAME"
     rm -rf "$TARGET_NAME"
   fi
 fi
 
-echo "[00] 解压: $ZIP_PATH"
+echo "[00] unzip: $ZIP_PATH"
 unzip -o "$ZIP_PATH"
 
 if [ ! -d "$TARGET_NAME" ] && [ -d "tracker_project" ]; then
@@ -70,9 +73,28 @@ if [ ! -d "$TARGET_NAME" ] && [ -d "tracker_project" ]; then
 fi
 
 if [ ! -d "$TARGET_DIR" ]; then
-  echo "[00] 解压后没有找到目标目录: $TARGET_DIR"
+  echo "[00] target project directory not found after unzip: $TARGET_DIR"
   exit 1
 fi
 
 cd "$TARGET_DIR"
-echo "[00] 当前目录: $(pwd)"
+echo "[00] project directory: $(pwd)"
+
+echo "[00] repair Linux permissions"
+find "$TARGET_DIR" -type d -exec chmod 755 {} +
+find "$TARGET_DIR" -type f -exec chmod 644 {} +
+if [ -d "$TARGET_DIR/scripts/run" ]; then
+  find "$TARGET_DIR/scripts/run" -type f -name "*.sh" -exec chmod 755 {} +
+fi
+
+PYTHON_BIN="${PYTHON_BIN:-$HOME/.venvs/zb/bin/python}"
+if [ ! -x "$PYTHON_BIN" ]; then
+  PYTHON_BIN="$(command -v python3 || command -v python || true)"
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo "[00] python not found; skip import self-check"
+else
+  echo "[00] import self-check with: $PYTHON_BIN"
+  PYTHONPATH="$TARGET_DIR/src" "$PYTHON_BIN" -c "import orangepi_tracker; print('[00] orangepi_tracker import ok')"
+fi

@@ -33,3 +33,19 @@ ensure_output_dirs() {
     fi
   done
 }
+
+stop_existing_web_server() {
+  local port="${1:-5000}"
+  echo "[common] stopping old web console process if it exists"
+  pkill -f "main.py --mode web" 2>/dev/null || true
+  if command -v sudo >/dev/null 2>&1; then
+    sudo pkill -f "main.py --mode web" 2>/dev/null || true
+  fi
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${port}/tcp" 2>/dev/null || true
+    if command -v sudo >/dev/null 2>&1; then
+      sudo fuser -k "${port}/tcp" 2>/dev/null || true
+    fi
+  fi
+  sleep 0.5
+}

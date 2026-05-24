@@ -23,6 +23,5 @@ def draw_overlay(frame: np.ndarray, detection: TargetDetection, state: str, pan:
     cv2.putText(output, f"pan={pan:.1f} tilt={tilt:.1f}", (12, 76), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 200, 0), 2, cv2.LINE_AA)
 
     if control is not None:
-        cv2.putText(output, f"err=({control.err_x:.1f},{control.err_y:.1f})", (12, 102), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2, cv2.LINE_AA)
+        cv2.putText(output, f"eff_err=({control.err_x:.1f},{control.err_y:.1f})", (12, 102), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2, cv2.LINE_AA)
     return output
-

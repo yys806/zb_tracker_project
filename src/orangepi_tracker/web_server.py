@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from html import escape as html_escape
 import json
 import socket
 import threading
@@ -10,12 +11,15 @@ from urllib.parse import urlparse
 import cv2
 
 
+WEB_CONSOLE_VERSION = "v27-status-reset-smooth"
+
+
 INDEX_HTML = """<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OrangePi 云台远程控制台</title>
+  <title>OrangePi 云台控制台</title>
   <style>
     :root {
       color-scheme: dark;
@@ -41,154 +45,36 @@ INDEX_HTML = """<!doctype html>
         linear-gradient(135deg, #060b0a, var(--bg));
       color: var(--text);
     }
-    main {
-      width: min(1320px, calc(100vw - 28px));
-      margin: 0 auto;
-      padding: 24px 0 32px;
-    }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: end;
-      gap: 16px;
-      margin-bottom: 18px;
-    }
-    h1 {
-      margin: 0;
-      font-size: clamp(1.9rem, 4vw, 3.4rem);
-      letter-spacing: -0.05em;
-    }
+    main { width: min(1320px, calc(100vw - 28px)); margin: 0 auto; padding: 24px 0 32px; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 3.4rem); letter-spacing: -0.05em; }
     p { margin: 8px 0 0; color: var(--muted); line-height: 1.65; }
-    .badge {
-      border: 1px solid rgba(242, 184, 75, 0.45);
-      border-radius: 999px;
-      color: var(--accent);
-      padding: 8px 14px;
-      white-space: nowrap;
-      background: rgba(242, 184, 75, 0.08);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.55fr) minmax(330px, 0.85fr);
-      gap: 16px;
-      align-items: start;
-    }
-    .frame, .panel {
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      background: var(--panel);
-      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
-      overflow: hidden;
-    }
-    .frame img {
-      display: block;
-      width: 100%;
-      height: auto;
-      background: #050807;
-    }
-    .panel {
-      padding: 16px;
-    }
-    .panel h2 {
-      margin: 0 0 12px;
-      font-size: 1rem;
-      color: var(--accent);
-    }
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-    .stat {
-      border-radius: 16px;
-      background: var(--panel-2);
-      padding: 12px;
-      min-height: 68px;
-    }
-    .stat span {
-      display: block;
-      color: var(--muted);
-      font-size: 0.78rem;
-    }
-    .stat strong {
-      display: block;
-      margin-top: 6px;
-      font-size: 1.16rem;
-      overflow-wrap: anywhere;
-    }
-    .row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin: 10px 0;
-    }
-    button, select, input {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: rgba(255,255,255,0.08);
-      color: var(--text);
-      padding: 9px 11px;
-      font: inherit;
-    }
-    select { min-width: 140px; }
-    button {
-      cursor: pointer;
-      transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
-    }
+    .badge { border: 1px solid rgba(242, 184, 75, 0.45); border-radius: 999px; color: var(--accent); padding: 8px 14px; white-space: nowrap; background: rgba(242, 184, 75, 0.08); }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(330px, 0.85fr); gap: 16px; align-items: start; }
+    .frame, .panel { border: 1px solid var(--line); border-radius: 24px; background: var(--panel); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32); overflow: hidden; }
+    .frame img { display: block; width: 100%; height: auto; background: #050807; }
+    .panel { padding: 16px; }
+    .panel h2 { margin: 0 0 12px; font-size: 1rem; color: var(--accent); }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .stat { border-radius: 16px; background: var(--panel-2); padding: 12px; min-height: 68px; }
+    .stat span { display: block; color: var(--muted); font-size: 0.78rem; }
+    .stat strong { display: block; margin-top: 6px; font-size: 1.16rem; overflow-wrap: anywhere; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    .button-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
+    .button-strip form { margin: 0; flex: 1 1 120px; min-width: 0; }
+    .button-strip button { width: 100%; min-height: 40px; }
+    button { border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,0.08); color: var(--text); padding: 8px 10px; font: inherit; cursor: pointer; transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease; }
     button:hover { transform: translateY(-1px); border-color: rgba(242,184,75,0.55); }
+    button:disabled { cursor: wait; opacity: 0.58; transform: none; }
     button.primary { background: rgba(242,184,75,0.16); color: var(--accent); }
     button.danger { background: rgba(255,107,95,0.15); color: var(--danger); }
     button.safe { background: rgba(94,230,168,0.12); color: var(--ok); }
-    .hsv-card {
-      border-radius: 16px;
-      background: var(--panel-2);
-      padding: 12px;
-      margin-top: 10px;
-    }
-    .hsv-title {
-      color: var(--muted);
-      font-size: 0.86rem;
-      margin-bottom: 8px;
-    }
-    .hsv-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-    }
-    label {
-      display: grid;
-      gap: 5px;
-      color: var(--muted);
-      font-size: 0.78rem;
-    }
-    input[type="number"] {
-      width: 100%;
-      padding: 8px 9px;
-    }
-    .message {
-      color: var(--muted);
-      min-height: 1.4em;
-      margin-top: 12px;
-      overflow-wrap: anywhere;
-    }
-    .tips {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      margin-top: 16px;
-    }
-    .tip {
-      border-radius: 18px;
-      background: rgba(255, 255, 255, 0.06);
-      padding: 14px 16px;
-      color: var(--muted);
-    }
+    .hsv-readout { border-radius: 16px; background: var(--panel-2); padding: 12px; margin: 10px 0 14px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, "Courier New", monospace; font-size: 0.86rem; line-height: 1.55; }
+    .message { color: var(--muted); min-height: 1.4em; margin-top: 12px; overflow-wrap: anywhere; }
+    .tips { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+    .tip { border-radius: 18px; background: rgba(255, 255, 255, 0.06); padding: 14px 16px; color: var(--muted); }
     code { color: var(--accent); }
-    @media (max-width: 960px) {
-      .grid { grid-template-columns: 1fr; }
-      header { align-items: start; flex-direction: column; }
-    }
+    @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } header { align-items: start; flex-direction: column; } }
   </style>
 </head>
 <body>
@@ -196,161 +82,174 @@ INDEX_HTML = """<!doctype html>
     <header>
       <div>
         <h1>OrangePi 云台控制台</h1>
-        <p>实时监控、颜色切换、HSV 调参、中心自动标定、急停和回中都在这里完成。</p>
+        <p>把目标卡片放在画面中心，点击中心自动标定。标定成功后再开始跟踪；启动后默认不会自动动舵机。</p>
       </div>
-      <div class="badge">MJPEG + Control API</div>
+      <div class="badge">Auto HSV + MJPEG · v27-status-reset-smooth</div>
     </header>
     <section class="grid">
-      <div class="frame">
-        <img src="/stream.mjpg" alt="OrangePi tracking stream" />
-      </div>
+      <div class="frame"><img src="/stream.mjpg" alt="OrangePi tracking stream" /></div>
       <aside class="panel">
         <h2>实时状态</h2>
         <div class="stats">
-          <div class="stat"><span>状态</span><strong id="state">-</strong></div>
+          <div class="stat"><span>状态 / 跟踪</span><strong id="state">-</strong></div>
           <div class="stat"><span>FPS</span><strong id="fps">-</strong></div>
           <div class="stat"><span>目标</span><strong id="target">-</strong></div>
           <div class="stat"><span>pan / tilt</span><strong id="angles">-</strong></div>
           <div class="stat"><span>面积 / 置信度</span><strong id="quality">-</strong></div>
-          <div class="stat"><span>颜色 / 后端</span><strong id="mode">-</strong></div>
+          <div class="stat"><span>后端 / 自适应</span><strong id="mode">-</strong></div>
         </div>
 
-        <h2>颜色与 HSV</h2>
-        <div class="row">
-          <select id="colorSelect"></select>
-          <button class="primary" id="applyColor">切换颜色</button>
-          <button class="safe" id="calibrate">中心自动标定</button>
+        <h2>自动标定</h2>
+        <p>只需要中心自动标定。系统会显示当前追踪 HSV，不需要手动调 HSV。</p>
+        <div class="button-strip">
+          <form action="/ui/calibrate" method="get">
+            <button class="safe" id="calibrate" type="submit">中心自动标定</button>
+          </form>
         </div>
-        <div id="hsvEditor"></div>
-        <div class="row">
-          <button class="primary" id="applyHsv">应用 HSV</button>
-          <button id="saveConfig">保存配置</button>
-        </div>
+        <div class="hsv-readout" id="hsvReadout">HSV: -</div>
 
         <h2>云台安全</h2>
-        <div class="row">
-          <button class="danger" id="stop">急停</button>
-          <button class="safe" id="resume">恢复跟踪</button>
-          <button class="primary" id="center">回中</button>
+        <div class="button-strip">
+          <form action="/ui/start" method="get">
+            <button class="safe" id="startTracking" type="submit">开始跟踪</button>
+          </form>
+          <form action="/ui/stop" method="get">
+            <button class="danger" id="stop" type="submit">急停</button>
+          </form>
+          <form action="/ui/reset" method="get">
+            <button class="primary" id="reset" type="submit">复位</button>
+          </form>
         </div>
-        <div class="message" id="message">正在连接控制台...</div>
+        <div class="message" id="message">表单控制已可用；如果实时状态不刷新，按钮仍然可以直接控制云台。</div>
       </aside>
     </section>
     <section class="tips">
-      <div class="tip">真实模式下急停会暂停舵机动作；恢复后继续根据目标偏差跟踪。</div>
-      <div class="tip">自动标定前，把目标放在画面中心十字线附近，再点击按钮。</div>
-      <div class="tip">如果网页打不开，先跑 <code>bash scripts/run/10_network_check.sh</code>。</div>
+      <div class="tip">程序启动后不会自动追踪，也不会自动回中。必须先中心自动标定，再点击开始跟踪。</div>
+      <div class="tip">如果目标短暂丢失，默认保持当前姿态，不再自动搜索乱扫。</div>
+      <div class="tip">如果网页卡顿，优先使用 USB 网口，或降低 <code>--jpeg</code> 参数。</div>
     </section>
   </main>
   <script>
-    const $ = (id) => document.getElementById(id);
-    let statusCache = null;
-    let hsvTouched = false;
+    function $(id) {
+      return document.getElementById(id);
+    }
 
-    async function api(path, body = null) {
-      const init = body === null
-        ? {}
-        : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-      const res = await fetch(path, init);
-      const data = await res.json();
-      if (!res.ok || data.ok === false) {
-        throw new Error(data.error || `request failed: ${path}`);
+    var messageEl = $("message");
+    messageEl.textContent = "控制台脚本已加载，正在读取状态...";
+
+    function requestUrl(path) {
+      var sep = path.indexOf("?") >= 0 ? "&" : "?";
+      return path + sep + "_ts=" + new Date().getTime();
+    }
+
+    function api(path, body, onSuccess, onError) {
+      var xhr = new XMLHttpRequest();
+      var done = false;
+      xhr.timeout = 3500;
+      var timer = window.setTimeout(function () {
+        if (done) return;
+        done = true;
+        try { xhr.abort(); } catch (err) {}
+        onError(new Error("request timeout: " + path));
+      }, 3500);
+
+      xhr.ontimeout = function () {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        onError(new Error("request timeout: " + path));
+      };
+
+      xhr.onerror = function () {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        onError(new Error("network error: " + path));
+      };
+
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4 || done) return;
+        done = true;
+        window.clearTimeout(timer);
+        try {
+          var data = JSON.parse(xhr.responseText || "{}");
+          if (xhr.status < 200 || xhr.status >= 300 || data.ok === false) {
+            onError(new Error(data.error || ("request failed: " + path)));
+            return;
+          }
+          onSuccess(data);
+        } catch (err) {
+          onError(err);
+        }
+      };
+
+      xhr.open(body === null ? "GET" : "POST", requestUrl(path), true);
+      xhr.setRequestHeader("Cache-Control", "no-store");
+      xhr.setRequestHeader("Pragma", "no-cache");
+      if (body !== null) {
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(JSON.stringify(body || {}));
+      } else {
+        xhr.send();
       }
-      return data;
     }
 
-    function rangeInput(rangeIndex, side, axis, value, max) {
-      return `<label>${side}.${axis}<input type="number" min="0" max="${max}" data-range="${rangeIndex}" data-side="${side}" data-axis="${axis}" value="${value}"></label>`;
-    }
-
-    function renderHsvEditor(ranges) {
-      if (hsvTouched) return;
-      const cards = ranges.map((range, index) => {
-        const lower = range.lower;
-        const upper = range.upper;
-        return `<div class="hsv-card">
-          <div class="hsv-title">HSV 范围 ${index + 1}</div>
-          <div class="hsv-grid">
-            ${rangeInput(index, "lower", "h", lower[0], 180)}
-            ${rangeInput(index, "lower", "s", lower[1], 255)}
-            ${rangeInput(index, "lower", "v", lower[2], 255)}
-            ${rangeInput(index, "upper", "h", upper[0], 180)}
-            ${rangeInput(index, "upper", "s", upper[1], 255)}
-            ${rangeInput(index, "upper", "v", upper[2], 255)}
-          </div>
-        </div>`;
-      }).join("");
-      $("hsvEditor").innerHTML = cards;
-      document.querySelectorAll("#hsvEditor input").forEach((input) => {
-        input.addEventListener("input", () => { hsvTouched = true; });
-      });
-    }
-
-    function readHsvEditor() {
-      const ranges = [];
-      document.querySelectorAll("#hsvEditor input").forEach((input) => {
-        const index = Number(input.dataset.range);
-        const side = input.dataset.side;
-        const axis = input.dataset.axis;
-        const axisIndex = {h: 0, s: 1, v: 2}[axis];
-        if (!ranges[index]) ranges[index] = { lower: [0, 0, 0], upper: [0, 0, 0] };
-        ranges[index][side][axisIndex] = Number(input.value);
-      });
-      return ranges;
+    function formatHsv(ranges) {
+      if (!ranges || ranges.length === 0) return "HSV: 未标定";
+      var lines = [];
+      for (var index = 0; index < ranges.length; index += 1) {
+        var range = ranges[index];
+        lines.push("范围 " + (index + 1) + ": lower=[" + range.lower.join(", ") + "]  upper=[" + range.upper.join(", ") + "]");
+      }
+      return lines.join("\\n");
     }
 
     function updateStatus(data) {
-      statusCache = data;
-      $("state").textContent = data.emergency_stop ? `${data.state} / STOP` : data.state;
-      $("fps").textContent = `${data.fps}`;
+      var runState = data.emergency_stop ? "STOP" : (data.tracking_enabled ? "RUNNING" : (data.color_ready ? "READY" : "NEED_CALIBRATE"));
+      $("state").textContent = String(data.state || "-") + " / " + runState;
+      $("fps").textContent = String(data.fps == null ? "-" : data.fps);
       $("target").textContent = data.target_found ? "FOUND" : "LOST";
       $("target").style.color = data.target_found ? "var(--ok)" : "var(--danger)";
-      $("angles").textContent = `${data.pan} / ${data.tilt}`;
-      $("quality").textContent = `${data.area} / ${data.confidence}`;
-      $("mode").textContent = `${data.color_name} / ${data.backend}`;
+      $("angles").textContent = String(data.pan == null ? "-" : data.pan) + " / " + String(data.tilt == null ? "-" : data.tilt);
+      $("quality").textContent = String(data.area == null ? "-" : data.area) + " / " + String(data.confidence == null ? "-" : data.confidence);
+      $("mode").textContent = String(data.backend || "-") + " / " + (data.adaptive_hsv_enabled ? "AUTO" : "FIXED") + (data.stale ? " / STALE" : "");
+      $("hsvReadout").textContent = formatHsv(data.hsv_ranges);
       $("message").textContent = data.message || "";
-
-      const select = $("colorSelect");
-      if (select.options.length === 0) {
-        data.available_colors.forEach((color) => {
-          const opt = document.createElement("option");
-          opt.value = color;
-          opt.textContent = color;
-          select.appendChild(opt);
-        });
-      }
-      select.value = data.color_name;
-      renderHsvEditor(data.hsv_ranges);
     }
 
-    async function refreshStatus() {
-      try {
-        const data = await api("/api/status");
-        updateStatus(data);
-      } catch (err) {
-        $("message").textContent = err.message;
-      }
+    function refreshStatus() {
+      api("/api/status", null, updateStatus, function (err) {
+        messageEl.textContent = "状态刷新失败：" + err.message + "。请确认网页地址、端口和后端进程。";
+      });
     }
 
-    async function postAndRefresh(path, body = {}) {
-      try {
-        const data = await api(path, body);
-        hsvTouched = false;
+    function postAndRefresh(path, body, button) {
+      var oldText = button ? button.textContent : "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "执行中...";
+      }
+      api(path, body || {}, function (data) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = oldText;
+        }
         updateStatus(data.status || data);
-      } catch (err) {
-        $("message").textContent = err.message;
-      }
+      }, function (err) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = oldText;
+        }
+        messageEl.textContent = err.message;
+      });
     }
 
-    $("applyColor").onclick = () => postAndRefresh("/api/color", { color: $("colorSelect").value });
-    $("applyHsv").onclick = () => postAndRefresh("/api/hsv", { ranges: readHsvEditor() });
-    $("calibrate").onclick = () => postAndRefresh("/api/calibrate");
-    $("saveConfig").onclick = () => postAndRefresh("/api/save-config");
-    $("stop").onclick = () => postAndRefresh("/api/stop");
-    $("resume").onclick = () => postAndRefresh("/api/resume");
-    $("center").onclick = () => postAndRefresh("/api/center");
+    $("calibrate").onclick = function (event) { if (event && event.preventDefault) event.preventDefault(); postAndRefresh("/api/calibrate", {}, $("calibrate")); return false; };
+    $("startTracking").onclick = function (event) { if (event && event.preventDefault) event.preventDefault(); postAndRefresh("/api/start", {}, $("startTracking")); return false; };
+    $("stop").onclick = function (event) { if (event && event.preventDefault) event.preventDefault(); postAndRefresh("/api/stop", {}, $("stop")); return false; };
+    $("reset").onclick = function (event) { if (event && event.preventDefault) event.preventDefault(); postAndRefresh("/api/reset", {}, $("reset")); return false; };
 
-    refreshStatus();
+    window.setTimeout(refreshStatus, 0);
     setInterval(refreshStatus, 1000);
   </script>
 </body>
@@ -425,6 +324,18 @@ class MjpegHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/status":
             self._send_json(self.server.app.get_console_status())
             return
+        if parsed.path == "/ui/calibrate":
+            self._handle_ui_action(self.server.app.calibrate_color)
+            return
+        if parsed.path == "/ui/start":
+            self._handle_ui_action(self.server.app.start_tracking)
+            return
+        if parsed.path == "/ui/stop":
+            self._handle_ui_action(self.server.app.stop_motion, return_status=True)
+            return
+        if parsed.path == "/ui/reset":
+            self._handle_ui_action(self.server.app.reset_gimbal)
+            return
         self.send_error(404)
 
     def do_POST(self) -> None:
@@ -432,29 +343,32 @@ class MjpegHandler(BaseHTTPRequestHandler):
         try:
             body = self._read_json()
             app = self.server.app
-            if parsed.path == "/api/color":
-                status = app.set_color(str(body.get("color", "")))
-            elif parsed.path == "/api/hsv":
-                status = app.set_hsv_ranges(body.get("ranges", []))
-            elif parsed.path == "/api/calibrate":
+            if parsed.path == "/api/calibrate":
                 status = app.calibrate_color()
-            elif parsed.path == "/api/save-config":
-                status = app.save_runtime_config()
+            elif parsed.path == "/api/start":
+                status = app.start_tracking()
             elif parsed.path == "/api/stop":
                 app.stop_motion()
                 status = app.get_console_status()
-            elif parsed.path == "/api/resume":
-                app.resume_motion()
-                status = app.get_console_status()
-            elif parsed.path == "/api/center":
-                app.center_gimbal()
-                status = app.get_console_status()
+            elif parsed.path == "/api/reset":
+                status = app.reset_gimbal()
             else:
                 self.send_error(404)
                 return
             self._send_json({"ok": True, "status": status})
         except Exception as exc:
             self._send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def _handle_ui_action(self, action, return_status: bool = False) -> None:
+        try:
+            result = action()
+            if return_status:
+                status = self.server.app.get_console_status()
+            else:
+                status = result
+            self._send_redirect("/", status)
+        except Exception as exc:
+            self._send_html(f"<pre>{html_escape(str(exc))}</pre>", status=400)
 
     def _read_json(self) -> dict:
         length = int(self.headers.get("Content-Length", "0"))
@@ -466,6 +380,9 @@ class MjpegHandler(BaseHTTPRequestHandler):
     def _send_index(self) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.send_header("Content-Length", str(len(INDEX_HTML)))
         self.end_headers()
         self.wfile.write(INDEX_HTML)
@@ -482,6 +399,28 @@ class MjpegHandler(BaseHTTPRequestHandler):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_redirect(self, location: str, status_payload: dict | None = None) -> None:
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        self.end_headers()
+
+    def _send_html(self, html: str, status: int = 200) -> None:
+        data = html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)

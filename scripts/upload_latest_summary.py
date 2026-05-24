@@ -91,9 +91,14 @@ def main() -> int:
     run_dir = Path(args.run_dir) if args.run_dir else find_latest_run(Path(args.logs_dir))
     benchmark_json = Path(args.benchmark_json) if args.benchmark_json else None
     payload = build_payload(run_dir, benchmark_json)
+    output_dir = run_dir / "analysis"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload_path = output_dir / "cloud_upload_payload.json"
+    payload_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if args.dry_run:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print(f"payload saved: {payload_path}")
         return 0
 
     try:
@@ -107,6 +112,7 @@ def main() -> int:
 
     print(f"上传成功，HTTP {status}")
     print(body)
+    print(f"payload saved: {payload_path}")
     return 0
 
 

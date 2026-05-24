@@ -52,6 +52,18 @@ def write_summary_csv(output_dir: str, stats: dict) -> str:
     return path
 
 
+def write_frame_csv(output_dir: str, frames: list[dict]) -> str:
+    path = os.path.join(output_dir, "tracking_frames_detail.csv")
+    if not frames:
+        return path
+    fieldnames = list(frames[0].keys())
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(frames)
+    return path
+
+
 def count_state_entries(states: list[str], state_name: str) -> int:
     count = 0
     previous = None
@@ -162,11 +174,13 @@ def main() -> int:
         json.dump(stats, fh, ensure_ascii=False, indent=2)
 
     csv_path = write_summary_csv(output_dir, stats)
+    frame_csv_path = write_frame_csv(output_dir, frames)
     plots = try_make_plots(output_dir, frames)
     md_path = write_markdown(output_dir, run_dir, stats, plots)
 
     print(f"Analyzed run: {run_dir}")
     print(f"Summary CSV:  {csv_path}")
+    print(f"Frame CSV:    {frame_csv_path}")
     print(f"Markdown:     {md_path}")
     for plot in plots:
         print(f"Plot:         {plot}")

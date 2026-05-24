@@ -12,8 +12,8 @@ HsvPresetMap = dict[str, list[HsvRange]]
 def default_color_presets() -> HsvPresetMap:
     return {
         "red": [
-            {"lower": [0, 120, 80], "upper": [10, 255, 255]},
-            {"lower": [170, 120, 80], "upper": [180, 255, 255]},
+            {"lower": [0, 70, 45], "upper": [15, 255, 255]},
+            {"lower": [165, 70, 45], "upper": [180, 255, 255]},
         ],
         "blue": [
             {"lower": [95, 90, 60], "upper": [130, 255, 255]},
@@ -49,6 +49,22 @@ class TrackerConfig:
     hsv_ranges: list[HsvRange]
     color_name: str = "red"
     color_presets: HsvPresetMap = field(default_factory=default_color_presets)
+    red_dominance_enabled: bool = True
+    red_min_channel: int = 70
+    red_margin: int = 28
+    detection_smoothing: float = 0.35
+    selection_inertia_px: float = 80.0
+    min_rect_fill_ratio: float = 0.58
+    max_jump_px: float = 100.0
+    jump_reject_area_ratio: float = 2.2
+    target_aspect_min: float = 0.65
+    target_aspect_max: float = 1.45
+    lost_hold_frames: int = 3
+    held_confidence_decay: float = 0.55
+    adaptive_hsv_enabled: bool = True
+    adaptive_hsv_alpha: float = 0.06
+    adaptive_hue_margin: int = 16
+    adaptive_sv_margin: int = 90
 
 
 @dataclass(slots=True)
@@ -68,6 +84,21 @@ class ControlConfig:
     tilt_kd: float
     max_step_deg: float
     smoothing: float
+    servo_min_delta_deg: float = 0.35
+    pan_max_step_deg: float | None = None
+    tilt_max_step_deg: float | None = None
+    pan_smoothing: float | None = None
+    tilt_smoothing: float | None = None
+    pan_deadzone_px: float | None = None
+    tilt_deadzone_px: float | None = None
+    pan_min_delta_deg: float | None = None
+    tilt_min_delta_deg: float | None = None
+    tilt_hold_enter_px: float | None = None
+    tilt_hold_release_px: float | None = None
+    tilt_settle_frames: int = 0
+    tilt_settle_release_px: float | None = None
+    pan_direction: float = -1.0
+    tilt_direction: float = -1.0
 
 
 @dataclass(slots=True)
@@ -77,6 +108,7 @@ class StateMachineConfig:
     search_after_seconds: float
     search_step_deg: float
     search_pan_span: float
+    enable_search: bool = False
 
 
 @dataclass(slots=True)
@@ -101,6 +133,11 @@ class HardwareConfig:
     frequency_hz: int
     min_pulse: int
     max_pulse: int
+    center_on_start: bool = False
+    release_on_start: bool = True
+    release_on_shutdown: bool = False
+    reset_step_deg: float = 2.0
+    reset_step_delay_s: float = 0.035
 
 
 @dataclass(slots=True)
