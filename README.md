@@ -4,6 +4,56 @@
 
 当前版本把原来的网页监控升级成了**网页远程控制台**：浏览器里可以看实时画面、查看状态、中心自动标定、只读显示当前 HSV、开始跟踪、急停和复位。网页启动后默认不控制舵机，也不会自动回中，必须先把目标放到画面中心完成自动标定，再点击开始跟踪。
 
+## 项目材料
+
+- 演示视频：[百度网盘链接](https://pan.baidu.com/s/1XZiJAh4sCwHBI5ZsC6_X-w?pwd=fva9)
+- GitHub 仓库：[yys806/zb_tracker_project](https://github.com/yys806/zb_tracker_project)
+- 完整命令文档：[docs/TEST_COMMANDS.md](docs/TEST_COMMANDS.md)
+- 详细接线表：[docs/wiring_table.xlsx](docs/wiring_table.xlsx)
+
+## 效果预览
+
+| 实际接线 | 网页真实跟踪 |
+| --- | --- |
+| ![实际接线](docs/assets/wiring_real.jpg) | ![网页真实跟踪](docs/assets/step04_web_real.jpg) |
+
+| FPS 曲线 | 中心误差曲线 | 云台角度曲线 |
+| --- | --- | --- |
+| ![FPS 曲线](docs/assets/fps_curve.jpg) | ![中心误差曲线](docs/assets/center_error_curve.jpg) | ![云台角度曲线](docs/assets/gimbal_angle_curve.jpg) |
+
+## 实验结果摘要
+
+代表性真实跟踪运行目录：`logs/20260524_013921`。
+
+| 指标 | 数值 |
+| --- | ---: |
+| 总帧数 | 2576 |
+| 平均 FPS | 23.112 |
+| 目标找到率 | 36.80% |
+| 平均水平中心误差 | 68.91 px |
+| 平均垂直中心误差 | 44.70 px |
+| 最大水平中心误差 | 307.00 px |
+| 最大垂直中心误差 | 174.00 px |
+| 目标丢失次数 | 2 |
+| 平均重新捕获时间 | 0.764 s |
+
+说明：该组数据来自完整调试过程，期间存在放下目标、移出画面、调整网页按钮等操作，因此目标找到率偏低。最终答辩演示时建议在干净背景下重新采集一组“便利贴始终在画面内”的标准数据。
+
+## C++ wheel 加速实验
+
+项目实现了一个 C++/pybind11 形态学算子并编译为 wheel，和 Python、OpenCV、pymp 后端做了对比。第 5 步 benchmark 结果如下：
+
+| 后端 | 平均耗时 ms/frame | 相对 Python 加速比 | 输出是否匹配 OpenCV |
+| --- | ---: | ---: | --- |
+| Python | 57.301 | 1.00x | 是 |
+| OpenCV | 0.044 | 1291.67x | 是 |
+| C++ wheel | 0.353 | 162.54x | 是 |
+| pymp | 356.775 | 0.16x | 是 |
+
+![C++ wheel benchmark](docs/assets/step05_cpp_benchmark.jpg)
+
+实验结论：C++ wheel 相比纯 Python 明显加速，说明“C/C++ 实现 + wheel 封装 + Python 调用”已经跑通；但 OpenCV 仍然最快，因为 OpenCV 形态学算子本身已经是高度优化的 C/C++ 实现。pymp 在该小粒度任务中反而更慢，说明并行调度开销大于计算收益。
+
 ## 当前硬件配置
 
 | 项目 | 当前结果 |
@@ -16,8 +66,6 @@
 | 舵机通道 | `channel 0 = tilt`，`channel 1 = pan` |
 | Python 环境 | `/home/orangepi/.venvs/zb` |
 | OrangePi 项目目录 | `/home/orangepi/zb/tracker_project` |
-
-详细接线表见 [docs/wiring_table.xlsx](docs/wiring_table.xlsx)。
 
 ## 已实现功能
 
