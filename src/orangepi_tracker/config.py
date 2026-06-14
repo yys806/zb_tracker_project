@@ -125,6 +125,28 @@ class UIConfig:
 
 
 @dataclass(slots=True)
+class GestureConfig:
+    enabled: bool = False
+    backend: str = "auto"
+    mediapipe_model_complexity: int = 0
+    mediapipe_min_detection_confidence: float = 0.55
+    mediapipe_min_tracking_confidence: float = 0.55
+    mediapipe_process_every_n: int = 2
+    min_area: int = 1800
+    min_area_ratio: float = 0.01
+    max_area_ratio: float = 0.55
+    blur_kernel: int = 5
+    morph_kernel: int = 7
+    min_defect_depth: float = 18.0
+    max_defect_angle_deg: float = 95.0
+    stable_frames: int = 2
+    skin_ycrcb_lower: list[int] = field(default_factory=lambda: [0, 133, 77])
+    skin_ycrcb_upper: list[int] = field(default_factory=lambda: [255, 173, 127])
+    skin_hsv_lower: list[int] = field(default_factory=lambda: [0, 25, 35])
+    skin_hsv_upper: list[int] = field(default_factory=lambda: [25, 220, 255])
+
+
+@dataclass(slots=True)
 class HardwareConfig:
     force_mock: bool
     i2c_address: int
@@ -149,6 +171,7 @@ class AppConfig:
     logging: LoggingConfig
     ui: UIConfig
     hardware: HardwareConfig
+    gesture: GestureConfig = field(default_factory=GestureConfig)
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -161,6 +184,7 @@ def load_config(path: str | Path) -> AppConfig:
         logging=LoggingConfig(**raw["logging"]),
         ui=UIConfig(**raw["ui"]),
         hardware=HardwareConfig(**raw["hardware"]),
+        gesture=GestureConfig(**raw.get("gesture", {})),
     )
 
 

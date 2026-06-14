@@ -10,6 +10,7 @@
 - GitHub 仓库：[yys806/zb_tracker_project](https://github.com/yys806/zb_tracker_project)
 - 完整命令文档：[docs/TEST_COMMANDS.md](docs/TEST_COMMANDS.md)
 - 详细接线表：[docs/wiring_table.xlsx](docs/wiring_table.xlsx)
+- 完整课程报告：[报告/orange_pi_tracker_report/main.pdf](报告/orange_pi_tracker_report/main.pdf)
 
 ## 效果预览
 
@@ -37,7 +38,7 @@
 | 目标丢失次数 | 2 |
 | 平均重新捕获时间 | 0.764 s |
 
-说明：该组数据来自完整调试过程，期间存在放下目标、移出画面、调整网页按钮等操作，因此目标找到率偏低。最终答辩演示时建议在干净背景下重新采集一组“便利贴始终在画面内”的标准数据。
+说明：该组数据来自完整调试过程，期间存在放下目标、移出画面、调整网页按钮等操作，因此目标找到率偏低。正式展示时可在干净背景下重新采集一组“便利贴始终在画面内”的标准数据。
 
 ## C++ wheel 加速实验
 
@@ -81,6 +82,10 @@
 | 加分项3 | pymp 并行加速 | 已实现可选 backend 和 benchmark 对比 |
 | 加分项4 | 云端服务/数据上传 | 已实现 mock 云端服务，可上传最新跟踪摘要和 benchmark |
 | 加分项5 | 云台安全保护 | 已实现开始跟踪、急停、渐进复位、启动释放 PWM、限位和限速 |
+| 加分项6 | 光流运动分析 | 已实现网页端光流统计、轨迹回放和区域热力图 |
+| 加分项7 | 画面质量检测 | 已实现亮度、对比度、清晰度、遮挡比例和事件日志 |
+| 加分项8 | 手势识别扩展 | 已实现可开关的手势识别面板和轮廓/置信度显示 |
+| 加分项9 | 大模型分析接口 | 已实现 DeepSeek 状态解释、视觉解释、异常诊断接口，默认未配置 API Key 时不请求外网 |
 
 DNN/RKNN 暂不进入当前命令流程。等主线和上述加分项全部稳定后，如果还有时间，再考虑作为额外扩展。
 
@@ -178,6 +183,10 @@ http://OrangePi-IP:5000
 - 当前 HSV 范围只读显示。
 - 固定宽 HSV 范围，避免现场动态漂移。
 - 开始跟踪、急停、复位。
+- 光流运动统计、轨迹回放、区域热力图。
+- 画面质量检测和事件日志。
+- 手势识别开关与结果显示。
+- DeepSeek 大模型分析按钮，未配置 API Key 时安全降级。
 
 真实模式推荐操作顺序：
 
@@ -202,6 +211,8 @@ tracker_project/
 ├── docs/
 │   ├── TEST_COMMANDS.md
 │   └── wiring_table.xlsx
+├── 报告/
+│   └── orange_pi_tracker_report/
 ├── scripts/
 │   ├── run/
 │   ├── analyze_tracking_logs.py

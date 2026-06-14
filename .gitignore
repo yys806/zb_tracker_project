@@ -14,6 +14,10 @@ logs/
 benchmark_results/
 cloud_uploads/
 *.log
+*.aux
+*.out
+*.toc
+*.synctex.gz
 python
 .DS_Store
 Thumbs.db

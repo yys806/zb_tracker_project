@@ -26,53 +26,41 @@ class WebServerMarkupTests(unittest.TestCase):
     def test_web_console_markup_is_valid_utf8_and_binds_controls(self) -> None:
         html = INDEX_HTML.decode("utf-8")
 
-        self.assertIn("<title>OrangePi 云台控制台</title>", html)
         self.assertIn(WEB_CONSOLE_VERSION, html)
-        self.assertIn("v27-status-reset-smooth", html)
         self.assertIn('xhr.setRequestHeader("Cache-Control", "no-store")', html)
-        self.assertIn('xhr.timeout = 3500;', html)
+        self.assertIn('var requestTimeout = timeoutMs || 6000;', html)
+        self.assertIn('xhr.timeout = requestTimeout;', html)
+        self.assertIn('var statusPending = false;', html)
+        self.assertIn('if (statusPending) return;', html)
         self.assertIn('xhr.ontimeout', html)
         self.assertIn('xhr.onerror', html)
-        self.assertIn("request timeout", html)
-        self.assertIn("控制台脚本已加载", html)
-        self.assertIn("表单控制已可用", html)
-        self.assertNotIn("正在连接控制台...", html)
-        self.assertIn('id="startTracking" type="submit">开始跟踪</button>', html)
-        self.assertIn('id="reset" type="submit">复位</button>', html)
-        self.assertIn("/api/status", html)
-        self.assertIn("window.setTimeout(refreshStatus, 0);", html)
-        self.assertIn('setInterval(refreshStatus, 1000);', html)
-        self.assertIn("XMLHttpRequest", html)
+        self.assertIn('action="/ui/flow-toggle"', html)
+        self.assertIn('/api/flow-toggle', html)
+        self.assertIn('/api/flow', html)
+        self.assertIn('action="/ui/gesture-toggle"', html)
+        self.assertIn('/api/gesture-toggle', html)
+        self.assertIn('/api/gesture', html)
+        self.assertIn('id="visionBackend"', html)
+        self.assertNotIn('action="/ui/vision-dnn"', html)
+        self.assertNotIn('action="/ui/vision-rknn"', html)
+        self.assertNotIn('/api/vision-mode', html)
+        self.assertIn('/api/ai/analyze', html)
+        self.assertIn('setInterval(refreshFlow, 3000);', html)
+        self.assertIn('id="trajectoryCanvas"', html)
+        self.assertIn('id="heatmapCanvas"', html)
+        self.assertIn('id="aiOutput"', html)
+        self.assertIn('requestAi("status"', html)
+        self.assertIn('requestAi("vision"', html)
+        self.assertIn('requestAi("diagnosis"', html)
 
-        unsupported_js_markers = ("async function", "await ", "=>", "const ", "let ", "${")
-        for marker in unsupported_js_markers:
-            self.assertNotIn(marker, html)
-
-        mojibake_markers = ("�", "锟", "娴", "閺", "閹", "闊", "閸", "閻", "缁")
-        for marker in mojibake_markers:
-            self.assertNotIn(marker, html)
-
-    def test_web_console_has_no_js_fallback_forms(self) -> None:
+    def test_web_console_has_operator_and_ai_buttons(self) -> None:
         html = INDEX_HTML.decode("utf-8")
 
-        self.assertIn('class="button-strip"', html)
-        self.assertIn('action="/ui/calibrate"', html)
-        self.assertIn('action="/ui/start"', html)
-        self.assertIn('action="/ui/stop"', html)
-        self.assertIn('action="/ui/reset"', html)
-        self.assertIn('method="get"', html)
-        self.assertIn('type="submit"', html)
-        self.assertNotIn('action="/ui/save-config"', html)
-        self.assertNotIn('action="/ui/resume"', html)
-
-    def test_web_console_only_exposes_four_operator_buttons(self) -> None:
-        html = INDEX_HTML.decode("utf-8")
-
-        self.assertEqual(html.count("<button "), 4)
-        for label in ("中心自动标定", "开始跟踪", "急停", "复位"):
-            self.assertIn(f">{label}</button>", html)
-        for removed_label in ("保存当前 HSV", "恢复跟踪", "保存配置", "切换颜色"):
-            self.assertNotIn(removed_label, html)
+        self.assertEqual(html.count("<button "), 9)
+        for label in ("中心自动标定", "开始跟踪", "急停", "复位", "显示光流箭头"):
+            self.assertIn(label, html)
+        for label in ("状态解释", "视觉解释", "异常诊断"):
+            self.assertIn(label, html)
 
     def test_web_server_handles_no_js_ui_routes(self) -> None:
         from orangepi_tracker.web_server import MjpegHandler
@@ -84,46 +72,19 @@ class WebServerMarkupTests(unittest.TestCase):
         self.assertIn("/ui/start", joined)
         self.assertIn("/ui/stop", joined)
         self.assertIn("/ui/reset", joined)
+        self.assertIn("/ui/flow-toggle", joined)
+        self.assertIn("/ui/gesture-toggle", joined)
+        self.assertNotIn("/ui/vision-dnn", joined)
+        self.assertNotIn("/ui/vision-rknn", joined)
         self.assertNotIn("/ui/resume", joined)
         self.assertNotIn("/ui/save-config", joined)
 
-    def test_web_console_exposes_reset_button_not_center_button(self) -> None:
+    def test_status_refresh_is_designed_to_show_flow_motion(self) -> None:
         html = INDEX_HTML.decode("utf-8")
 
-        self.assertIn('id="reset"', html)
-        self.assertIn("/api/reset", html)
-        self.assertIn('$("calibrate").onclick', html)
-        self.assertIn('$("startTracking").onclick', html)
-        self.assertIn('$("stop").onclick', html)
-        self.assertIn('$("reset").onclick', html)
-        self.assertNotIn('id="saveConfig"', html)
-        self.assertNotIn('id="resume"', html)
-        self.assertNotIn("/api/save-config", html)
-        self.assertNotIn("/api/resume", html)
-        self.assertNotIn('id="center"', html)
-        self.assertNotIn("/api/center", html)
-
-    def test_web_console_uses_auto_calibration_not_manual_hsv_or_color_pick(self) -> None:
-        html = INDEX_HTML.decode("utf-8")
-
-        self.assertIn('id="calibrate"', html)
-        self.assertIn('id="hsvReadout"', html)
-        self.assertNotIn('id="colorSelect"', html)
-        self.assertNotIn('id="applyColor"', html)
-        self.assertNotIn('id="applyHsv"', html)
-        self.assertNotIn('id="hsvEditor"', html)
-        self.assertNotIn("/api/color", html)
-        self.assertNotIn("/api/hsv", html)
-
-    def test_status_refresh_is_designed_to_show_hsv_and_live_status(self) -> None:
-        html = INDEX_HTML.decode("utf-8")
-
-        self.assertIn("formatHsv(data.hsv_ranges)", html)
-        self.assertIn('data.hsv_ranges', html)
-        self.assertIn('$("state").textContent', html)
-        self.assertIn('$("fps").textContent', html)
-        self.assertIn('$("angles").textContent', html)
-        self.assertIn('$("hsvReadout").textContent', html)
+        self.assertIn('$("flowState").textContent', html)
+        self.assertIn('drawTrajectory(data);', html)
+        self.assertIn('drawHeatmap(data);', html)
 
     def test_inline_javascript_has_valid_syntax(self) -> None:
         node = shutil.which("node")

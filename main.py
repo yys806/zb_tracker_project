@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--web-port", type=int, default=5000, help="网页监控端口")
     parser.add_argument("--web-jpeg-quality", type=int, default=70, help="网页视频 JPEG 质量")
     parser.add_argument("--web-fps", type=float, default=30.0, help="网页视频推流帧率")
+    parser.add_argument("--camera-index", type=int, default=None, help="override OpenCV camera index")
     return parser.parse_args()
 
 
@@ -44,6 +45,8 @@ def main() -> int:
         config.hardware.force_mock = True
     if args.tracker_backend:
         config.tracker.backend = args.tracker_backend
+    if args.camera_index is not None:
+        config.camera.device_index = args.camera_index
 
     app = TrackingApplication(config, config_path=args.config)
     if args.mode == "camera-test":

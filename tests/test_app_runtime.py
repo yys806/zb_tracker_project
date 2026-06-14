@@ -19,6 +19,7 @@ from orangepi_tracker.config import (
     CameraConfig,
     ControlConfig,
     HardwareConfig,
+    GestureConfig,
     LoggingConfig,
     StateMachineConfig,
     TrackerConfig,
@@ -97,6 +98,7 @@ class ApplicationRuntimeTests(unittest.TestCase):
             ),
             logging=LoggingConfig(enabled=False, log_dir="logs"),
             ui=UIConfig(show_window=False, window_name="test", draw_mask_preview=False),
+            gesture=GestureConfig(enabled=False, min_area=200, min_area_ratio=0.0, stable_frames=1),
             hardware=HardwareConfig(
                 force_mock=True,
                 i2c_address=0x40,
@@ -413,6 +415,48 @@ class ApplicationRuntimeTests(unittest.TestCase):
 
         self.assertEqual(result[0]["hsv_ranges"], initial_status["hsv_ranges"])
         self.assertTrue(result[0]["stale"])
+
+    def test_flow_status_is_exposed_in_console_snapshot(self) -> None:
+        app = self.make_app()
+        app.tracking_enabled = True
+        app.last_flow.motion_detected = True
+        app.last_flow.active_points = 8
+        app.last_flow.total_points = 20
+        app.last_flow.mean_magnitude = 2.4
+
+        status = app.get_flow_status()
+        console = app.get_console_status()
+
+        self.assertTrue(status["motion_detected"])
+        self.assertEqual(status["active_points"], 8)
+        self.assertIn("flow", console)
+        self.assertIn("flow_time_ms", console)
+        self.assertTrue(console["flow"]["enabled"])
+
+    def test_gesture_toggle_is_exposed_in_console_snapshot(self) -> None:
+        app = self.make_app()
+
+        initial = app.get_console_status()
+        self.assertIn("gesture", initial)
+        self.assertFalse(initial["gesture"]["enabled"])
+
+        enabled = app.set_gesture_enabled(True)
+
+        self.assertTrue(enabled["gesture"]["enabled"])
+        self.assertIn("gesture recognition enabled", enabled["message"])
+
+    def test_gesture_status_updates_when_enabled(self) -> None:
+        app = self.make_app()
+        app.set_gesture_enabled(True)
+        frame = np.zeros((120, 160, 3), dtype=np.uint8)
+        frame[35:90, 55:110] = (80, 120, 190)
+
+        app._process_frame(frame, 1.0 / 30.0)
+        status = app.get_gesture_status()
+
+        self.assertTrue(status["enabled"])
+        self.assertIn("found", status)
+        self.assertIn("gesture_time_ms", status)
 
 
 if __name__ == "__main__":

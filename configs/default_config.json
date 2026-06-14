@@ -121,6 +121,26 @@
     "window_name": "OrangePi Tracker",
     "draw_mask_preview": true
   },
+  "gesture": {
+    "enabled": false,
+    "backend": "auto",
+    "mediapipe_model_complexity": 0,
+    "mediapipe_min_detection_confidence": 0.55,
+    "mediapipe_min_tracking_confidence": 0.55,
+    "mediapipe_process_every_n": 2,
+    "min_area": 1800,
+    "min_area_ratio": 0.01,
+    "max_area_ratio": 0.55,
+    "blur_kernel": 5,
+    "morph_kernel": 7,
+    "min_defect_depth": 18.0,
+    "max_defect_angle_deg": 95.0,
+    "stable_frames": 2,
+    "skin_ycrcb_lower": [0, 133, 77],
+    "skin_ycrcb_upper": [255, 173, 127],
+    "skin_hsv_lower": [0, 25, 35],
+    "skin_hsv_upper": [25, 220, 255]
+  },
   "hardware": {
     "force_mock": false,
     "i2c_address": 64,
