@@ -1,0 +1,547 @@
+% !TeX program = xelatex
+% !TeX encoding = UTF-8
+% !TeX root = main.tex
+
+\documentclass[
+  oneside,
+  degree=bachelor,
+  field=science,
+  fullwidthstop=circle,
+  fontset=windows,
+  times=false,
+  minted=false,
+  biblatex=false,
+  algo=algpseudocode,
+]{tongjithesis}
+
+\renewcommand{\tjcovertext}{课程大作业报告}
+\renewcommand{\tjheadertext}{课程大作业报告}
+\geometry{a4paper,top=4.0cm,bottom=2.7cm,left=2.5cm,right=2.5cm}
+\tjbindinglinefalse
+\raggedbottom
+
+\setlength{\textfloatsep}{6pt plus 1pt minus 1pt}
+\setlength{\floatsep}{5pt plus 1pt minus 1pt}
+\setlength{\intextsep}{5pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\belowcaptionskip}{1pt}
+\captionsetup{skip=2pt}
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\bottomfraction}{0.90}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.85}
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{6pt plus 1fil}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+
+\graphicspath{{figures/}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\imgfig}[3]{
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{figures/#1}{
+      \includegraphics[width=#2\linewidth]{figures/#1}
+    }{
+      \fbox{\parbox{0.86\linewidth}{\centering\vspace{1.0cm}图片文件：\code{#1}\vspace{1.0cm}}}
+    }
+    \caption{#3}
+    \vspace{-0.5em}
+  \end{figure}
+}
+\newcommand{\sharedimgfig}[3]{
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{../figures/#1}{
+      \includegraphics[width=#2\linewidth]{../figures/#1}
+    }{
+      \fbox{\parbox{0.86\linewidth}{\centering\vspace{1.0cm}Image file: \code{../figures/#1}\vspace{1.0cm}}}
+    }
+    \caption{#3}
+    \vspace{-0.5em}
+  \end{figure}
+}
+
+\begin{document}
+
+\school{电子信息学院}
+\major{人工智能}
+\student{2352396 / 2352620 / 2351283}{禹尧珅 / 蒋文涛 / 吴凯}
+\thesistitle{基于 OrangePi 的两自由度云台目标跟踪系统}{综合设计实践B 课程大作业报告}
+\thesistitleeng{Two-axis Pan-tilt Target Tracking System Based on OrangePi}{Course Project Report}
+\thesisadvisor{龚炜，王晓年}
+\thesisdate{2026}{5}{24}
+
+\MakeCover
+\cleardoublepage
+
+\frontmatter
+
+\MakeAbstract{
+本报告记录了综合设计实践B课程大作业“基于 OrangePi 的两自由度云台目标跟踪系统”的设计、实现、调试与实验结果。系统以 OrangePi 5 Pro/RK3588S 开发板为主控平台，连接 USB 摄像头、PCA9685 PWM 舵机驱动板和两自由度云台，形成从视频采集、颜色目标检测、状态判断、云台控制到网页远程监看的闭环系统。主线算法采用 Python + OpenCV 实现 HSV 颜色分割、形态学去噪、轮廓筛选和目标中心估计，再由带死区、限幅和平滑约束的双舵机控制器驱动云台，使高对比便利贴目标尽量保持在画面中心附近。
+
+项目已完成硬件接线、I2C/PCA9685 识别、摄像头读取、舵机通道标定、网页控制台、自动中心标定、急停与复位保护、日志记录、实验曲线生成以及一键运行脚本。围绕课程加分项，项目实现了 C/C++ 视觉算子 wheel 封装并与 Python/OpenCV/pymp 版本进行性能对比，同时实现了网页网络控制台和 mock 云端上传。实测结果表明，系统在网页真实跟踪模式下平均帧率约 23 FPS；代表性运行中平均水平误差为 68.91 像素、平均垂直误差为 44.70 像素，丢失后平均重捕获时间约 0.76 秒。实验同时说明，C++ wheel 模块能够正确编译与调用，并且输出与 OpenCV 一致；在当前小尺寸形态学任务中，OpenCV 仍因高度优化而最快。
+}{OrangePi；两自由度云台；目标跟踪；OpenCV；PCA9685；网页控制台；C++ wheel}
+
+\MakeAbstractEng{
+This report presents a two-axis pan-tilt target tracking system for the Comprehensive Design Practice B course project. The system uses an OrangePi 5 Pro/RK3588S board, a USB camera, a PCA9685 PWM servo driver and a two-degree-of-freedom gimbal. A complete closed loop is implemented from video capture and HSV-based target detection to bounded servo control and web-based remote monitoring. The system supports hardware validation, web console operation, automatic center calibration, emergency stop, smooth reset, logging and quantitative analysis. Bonus work includes a C/C++ wheel implementation of a morphology operator, a pymp comparison, network programming through the web console, and mock cloud upload of experiment results.
+}{OrangePi, Pan-tilt Control, Target Tracking, OpenCV, PCA9685, C++ Wheel}
+
+\clearpage
+\tableofcontents
+\cleardoublepage
+
+\mainmatter
+
+\chapter{项目概述}
+
+\section{课题背景}
+
+摄像头云台目标跟踪系统是一个典型的软硬件结合任务。它不仅要求程序能够从摄像头图像中识别目标，还要求机械云台根据目标相对画面中心的偏差实时调整姿态。因此，本项目同时涉及嵌入式 Linux 使用、I2C 外设通信、PWM 舵机控制、图像处理、控制算法、网络调试和实验数据记录。
+
+结合课程硬件条件和课程验收需求，本项目没有把“任意目标检测”作为基线目标，而是选择高对比颜色便利贴作为跟踪对象。这样做的主要原因是传统视觉方案可解释、参数可调、部署轻量，更适合在 OrangePi 板端稳定运行。综合板端存储空间、依赖安装成本和演示稳定性，当前交付版本不纳入 DNN/RKNN 检测链路，而是保留 HSV 跟踪、手势识别和运动分析等轻量扩展。
+
+\section{完成目标}
+
+本项目最终目标是完成一个可交付运行、可复现运行、可量化评估的实时目标跟踪系统。当前完成情况如表~\ref{tab:goal-status} 所示。
+
+\begin{table}[H]
+  \centering
+  \caption{项目目标完成情况}
+  \label{tab:goal-status}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{p{0.30\linewidth}p{0.50\linewidth}p{0.12\linewidth}}
+    \toprule
+    目标 & 当前实现 & 状态 \\
+    \midrule
+    OrangePi 上电后运行跟踪程序 & 固定项目目录为 \code{/home/orangepi/zb/tracker_project}，通过 \code{scripts/run/*.sh} 启动 & 已完成 \\
+    摄像头实时采集画面 & USB 摄像头接入 OrangePi，OpenCV 读取到 \code{640x480} 彩色帧 & 已完成 \\
+    识别高对比标记目标 & HSV 自动中心标定 + 宽松阈值 + 形态学去噪 + 正方形候选筛选 & 已完成 \\
+    控制两自由度云台跟随目标 & PCA9685 输出 PWM，\code{channel 0 = tilt}，\code{channel 1 = pan} & 已完成 \\
+    目标丢失时不乱转 & 状态机与保持逻辑结合，网页提供急停与复位 & 已完成 \\
+    网页远程监看与控制 & HTTP/MJPEG 网页控制台，支持状态显示、自动标定、开始、急停、复位 & 已完成 \\
+    输出量化数据 & 每次运行生成 \code{frames.csv}、\code{summary.json} 和分析曲线 & 已完成 \\
+    C/C++ wheel 加分项 & 用 pybind11 封装形态学算子，编译为 wheel 并与 Python/OpenCV/pymp 对比 & 已完成 \\
+    网络与云端加分项 & mock 云端服务接收 tracking summary 与 benchmark payload & 已完成 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{小组成员与分工}
+
+\begin{table}[H]
+  \centering
+  \caption{小组成员与分工}
+  \label{tab:members}
+  \begin{tabular}{lll}
+    \toprule
+    学号 & 姓名 & 主要分工 \\
+    \midrule
+    2352396 & 禹尧珅 & 项目统筹、硬件调试、代码集成、报告整理 \\
+    2352620 & 蒋文涛 & 视觉检测、网页控制台、实验运行与截图整理 \\
+    2351283 & 吴凯 & 舵机控制、加分项实验、数据分析与答辩材料整理 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\chapter{硬件搭建与网络部署}
+
+\section{硬件组成}
+
+系统硬件由 OrangePi 主控板、USB 摄像头、PCA9685 舵机驱动板、两自由度云台、双舵机、电源与连接线组成。摄像头必须接在 OrangePi 上，因为图像采集和目标检测都在 OrangePi 端运行；电脑只作为远程终端和网页显示端。
+
+\begin{table}[H]
+  \centering
+  \caption{硬件清单与作用}
+  \label{tab:hardware}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    硬件 & 作用 & 当前状态 \\
+    \midrule
+    OrangePi 5 Pro/RK3588S & 主控、视觉计算、网页服务、I2C 控制 & 已运行 Ubuntu 系统 \\
+    USB 摄像头 & 采集目标图像 & 已读取到彩色帧 \\
+    PCA9685 & 16 路 PWM 舵机驱动 & I2C 地址 \code{0x40} 已识别 \\
+    水平舵机 & 控制底座左右旋转 & 接 \code{channel 1} \\
+    俯仰舵机 & 控制摄像头上下运动 & 接 \code{channel 0} \\
+    独立 5V 电源 & 给舵机供电 & 与 OrangePi 共地 \\
+    USB 转网口 & 提升 SSH 与网页控制稳定性 & 已用于有线连接方案 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{接线方案}
+
+PCA9685 的 I2C 逻辑侧由 OrangePi 提供 3.3V 与 GND；舵机电源侧使用独立 5V 供电，避免舵机电流波动影响 OrangePi 稳定性。实际调试中确认 PCA9685 出现在 \code{/dev/i2c-1}，地址为 \code{0x40}，同时可见 PCA9685 All Call 地址 \code{0x70}。
+
+\begin{table}[H]
+  \centering
+  \caption{最终接线表}
+  \label{tab:wiring}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{p{0.30\linewidth}p{0.34\linewidth}p{0.26\linewidth}}
+    \toprule
+    PCA9685/外设端 & OrangePi/其他端 & 说明 \\
+    \midrule
+    VCC & OrangePi 3.3V & I2C 逻辑电源 \\
+    GND & OrangePi GND、舵机电源负极 & 必须共地 \\
+    SDA & OrangePi 40Pin 第 3 脚 & I2C 数据线 \\
+    SCL & OrangePi 40Pin 第 5 脚 & I2C 时钟线 \\
+    V+ / 绿色端子 & 独立 5V 舵机电源正极 & 给舵机供电 \\
+    channel 0 & 俯仰舵机信号线 & 控制摄像头上下 \\
+    channel 1 & 水平舵机信号线 & 控制底座左右 \\
+    USB 摄像头 & OrangePi USB 口 & 图像采集输入 \\
+    Type-C 电源 & OrangePi 电源适配器 & 给开发板供电 \\
+    USB 转网口 & 电脑与 OrangePi 直连 & 提高远程调试稳定性 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\imgfig{wiring_real.jpg}{0.86}{实际接线效果}
+
+\section{网络连接与远程调试}
+
+前期使用 Wi-Fi 热点时，SSH 和网页 MJPEG 流在不同时间段稳定性差异明显。为减少网络不确定性，最终采用“电脑连接 Wi-Fi 上网，同时通过 USB 转网口与 OrangePi 有线直连，并将电脑网络共享给 OrangePi”的方案。这样电脑可继续联网，OrangePi 也能通过有线链路获得更稳定的局域网连接。
+
+\imgfig{ethernet_diagram.jpg}{0.78}{电脑与 OrangePi 有线连接示意}
+\imgfig{network_share_pc.jpg}{0.78}{Windows 网络共享设置}
+\imgfig{network_board.jpg}{0.78}{OrangePi 获取网络地址}
+\imgfig{ssh_connection.png}{0.86}{MobaXterm SSH 连接 OrangePi}
+\imgfig{ethernet_speed.png}{0.78}{有线传输速度截图}
+
+\chapter{软件系统设计}
+
+\section{总体架构}
+
+软件系统采用模块化结构。摄像头模块负责读取帧；视觉模块负责从 HSV 空间中提取目标；状态机模块判断当前是等待、跟踪、短时丢失还是搜索；控制模块将目标偏差转换为 pan/tilt 角度；硬件模块通过 PCA9685 设置 PWM；网页模块提供 MJPEG 视频流和控制 API；日志模块记录每帧状态并生成统计结果。
+
+\begin{table}[H]
+  \centering
+  \caption{软件模块划分}
+  \label{tab:modules}
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{p{0.16\linewidth}p{0.30\linewidth}p{0.44\linewidth}}
+    \toprule
+    模块 & 主要文件 & 功能 \\
+    \midrule
+    主入口 & \code{main.py} & 解析模式、配置、网页参数与后端选择 \\
+    配置 & \code{config.py}、\code{configs/default_config.json} & 管理摄像头、视觉、控制、硬件、日志参数 \\
+    视觉检测 & \code{tracker.py} & HSV 分割、形态学、候选框筛选、中心标定 \\
+    手势识别 & \code{gesture.py} & 优先使用 MediaPipe Hands 预训练手部关键点模型识别手势，导入失败时回退传统轮廓方案 \\
+    运动分析 & \code{flow.py}、\code{motion.py} & 光流统计、轨迹回放、区域热力图和画面质量评估 \\
+    云台控制 & \code{control.py} & 死区、限幅、平滑、方向修正和角度输出 \\
+    硬件驱动 & \code{hardware.py} & PCA9685 寄存器、舵机角度映射、PWM 释放 \\
+    主控应用 & \code{app.py} & 串联摄像头、检测、状态机、控制、日志 \\
+    网页服务 & \code{web_server.py} & MJPEG 推流、状态 API、控制按钮 \\
+    日志分析 & \code{logging_utils.py}、\code{analyze_tracking_logs.py} & 记录 CSV/JSON 并生成图表 \\
+    加速实验 & \code{cpp_accel}、\code{benchmark_morphology.py} & C++ wheel 与多后端 benchmark \\
+    运行脚本 & \code{scripts/run/*.sh} & 固化环境检查、硬件测试、演示和加分项流程 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{视觉检测流程}
+
+目标检测采用传统视觉路线。程序先将 BGR 图像转换为 HSV 图像，再根据中心自动标定得到的颜色范围生成二值 mask；随后通过形态学开闭运算去除孤立噪声并填补目标内部小孔；最后根据轮廓面积、正方形程度、填充率、与上一帧位置的连续性等规则选出最可信候选框。检测输出包括 \code{found}、目标中心点、边界框、面积、置信度以及当前 HSV 信息。
+
+为了适配 6.5 cm $\times$ 6.5 cm 正方形便利贴，系统没有只按“最大色块”选目标，而是增加了正方形约束和连续性约束。这样可以降低背景中同色细长物体或大面积干扰物被误跟的概率。对于短暂 1--5 帧丢检，系统会保持上一帧可靠检测框，避免目标框闪烁直接导致舵机抖动。
+
+\section{云台控制策略}
+
+控制器以画面中心为期望位置。设目标中心为 $(c_x,c_y)$，图像宽高为 $(W,H)$，则误差定义为：
+
+\begin{equation}
+  e_x = c_x - \frac{W}{2}, \qquad e_y = c_y - \frac{H}{2}.
+\end{equation}
+
+水平误差用于控制 pan 舵机，垂直误差用于控制 tilt 舵机。控制器没有直接让舵机按误差大幅跳变，而是加入了死区、单帧最大角度变化、最小有效角度变化、轴向平滑与限位。当前有效角度范围为 pan $20^\circ$--$160^\circ$，tilt $35^\circ$--$145^\circ$，初始角均为 $90^\circ$。网页复位按钮会先急停并释放 PWM，再缓入缓出回到初始角，最后再次释放 PWM，以减少俯仰舵机复位时的卡顿和持续受力。
+
+\section{网页控制台}
+
+最终交付版本统一使用网页控制台，不再依赖 OpenCV 本地窗口或 X11 转发。OrangePi 端启动 HTTP 服务后，电脑浏览器访问 \code{http://OrangePi-IP:5000} 即可看到实时视频、目标框、中心点、状态、FPS、pan/tilt 角度和 HSV 信息。控制台按钮被精简为自动标定、开始跟踪、急停和复位，降低实际操作误触风险。
+
+\begin{table}[H]
+  \centering
+  \caption{网页控制台主要接口}
+  \label{tab:web-api}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    接口 & 方法 & 功能 \\
+    \midrule
+    \code{/} & GET & 网页控制台首页 \\
+    \code{/stream.mjpg} & GET & MJPEG 实时视频流 \\
+    \code{/health} & GET & 后端健康检查 \\
+    \code{/api/status} & GET & 获取状态、FPS、目标、角度、HSV 等信息 \\
+    \code{/api/calibrate} & POST & 以画面中心 ROI 自动标定 HSV \\
+    \code{/api/start} & POST & 开始真实跟踪 \\
+    \code{/api/stop} & POST & 急停，暂停舵机动作 \\
+    \code{/api/reset} & POST & 急停后平滑复位到初始角 \\
+    \code{/api/flow} & GET & 获取光流、轨迹和运动状态信息 \\
+    \code{/api/flow-toggle} & POST & 开关视频中的光流箭头叠加 \\
+    \code{/api/gesture} & GET & 获取手势识别状态、识别后端、手指数和置信度信息 \\
+    \code{/api/gesture-toggle} & POST & 开关手势识别扩展模块 \\
+    \code{/api/ai/analyze} & POST & 根据当前运行状态生成辅助分析文本 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\imgfig{step03_web_sim.jpg}{0.92}{网页控制台模拟模式}
+\imgfig{step04_web_real.jpg}{0.92}{网页控制台真实跟踪模式}
+
+\subsection{新版网页控制台扩展}
+
+在当前版本中，网页控制台没有把所有控制项挤在侧边栏，而是把视频画面作为上方主区域，将 HSV 参数、手势识别、光流显示、轨迹回放、热力图、画面质量和事件日志放在视频下方。该布局保留了实时监看空间，并适配小屏浏览器中的扩展信息展示。
+
+\sharedimgfig{web_overlay_tracking_flow.png}{0.92}{新版网页控制台的视频叠加效果}
+\sharedimgfig{web_quality_events_ai.png}{0.92}{网页控制台的画面质量、事件日志与 AI 分析区域}
+\sharedimgfig{web_flow_trajectory.png}{0.58}{网页控制台的目标轨迹回放}
+\sharedimgfig{web_region_heatmap.png}{0.78}{网页控制台的区域热力图}
+
+\section{手势识别扩展}
+
+手势识别是当前版本新增的人机交互扩展。早期版本使用 YCrCb/HSV 肤色分割、形态学去噪、最大轮廓、凸包和凸缺陷估计手指数，但实测发现该方法对光照、背景肤色干扰和手掌姿态非常敏感，容易把桌面、手臂或阴影误认为手。为提高稳定性，最终版本优先接入 MediaPipe Hands 预训练手部关键点模型：后端在启动时尝试初始化 MediaPipe，成功时使用 21 个手部关键点估计手指伸展状态，并输出 \code{fist}、\code{one}、\code{two}、\code{three}、\code{four}、\code{open\_palm} 等类别；板端环境未安装 MediaPipe 或初始化失败时，系统自动回退到原有传统轮廓方案，保证功能不会因为依赖缺失而整体不可用。
+
+该扩展默认关闭，网页控制台提供独立开关。开启后，状态接口会返回手势类别、手指数、置信度、识别后端、中心点、边界框和推理耗时等信息，Web 端可以直接看到后端是 \code{mediapipe} 还是 \code{traditional}。在 OrangePi 5 Pro 板端验证时，\code{mediapipe==0.10.18} 可以正常导入，探针输出 \code{mediapipe available: True}、\code{active backend: mediapipe}、\code{mp error: None}，说明当前手势识别已经由 MediaPipe 后端接管。关闭该扩展时，HSV 目标跟踪和云台控制主流程不受影响；该模块也为开始、急停、复位和清空轨迹等手势控制命令预留了接口。
+
+\sharedimgfig{web_gesture_panel.png}{0.92}{网页控制台的手势识别扩展信息}
+
+\section{脚本化运行流程}
+
+项目将常用操作固化为 shell 脚本，减少手输长命令导致的错误。主线流程为 01--04，创新点验证为 05--08。
+
+\begin{table}[H]
+  \centering
+  \caption{运行脚本与用途}
+  \label{tab:scripts}
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{p{0.07\linewidth}p{0.35\linewidth}p{0.46\linewidth}}
+    \toprule
+    步骤 & 脚本 & 用途 \\
+    \midrule
+    00 & \code{00_import_project.sh} & 导入项目并修复 Linux 权限，实际命令为 \code{bash scripts/run/00_import_project.sh --zip ~/v28.zip} \\
+    01 & \code{01_env_check.sh} & 检查虚拟环境、依赖、源码导入和单元测试 \\
+    02 & \code{02_hardware_check.sh} & 检查 I2C、PCA9685、舵机和摄像头 \\
+    03 & \code{03_web_console_simulate.sh} & 网页模拟模式，不控制真实舵机 \\
+    04 & \code{04_web_console_real.sh} & 网页真实模式，控制云台跟踪目标 \\
+    05 & \code{05_cpp_benchmark.sh} & 编译 C++ wheel 并进行视觉算子性能对比 \\
+    06 & \code{06_pymp_benchmark.sh} & 进行 pymp 并行后端对比 \\
+    07 & \code{07_mock_cloud_upload.sh} & 上传最新日志摘要和 benchmark 到 mock 云端 \\
+    08 & \code{08_analyze_latest_logs.sh} & 分析最新跟踪日志并生成图表 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\imgfig{import_unzip.jpg}{0.82}{项目压缩包解压与导入过程}
+
+\chapter{调试过程与功能验证}
+
+\section{环境检查}
+
+环境检查脚本用于确认虚拟环境、OpenCV、smbus2、项目源码导入和单元测试均正常。v28 版本额外修复了导入项目后目录权限异常导致 \code{ModuleNotFoundError: No module named 'orangepi_tracker'} 的问题：导入脚本会将目录权限修复为 755、普通文件修复为 644，并在解压后执行一次 \code{import orangepi_tracker} 自检。
+
+\imgfig{step01_env_check.jpg}{0.86}{第一步环境检查结果}
+
+\section{硬件检查}
+
+硬件检查脚本会列出 \code{/dev/i2c-*}，扫描 PCA9685，运行安全角度范围内的舵机测试，并读取摄像头单帧。调试中确认 PCA9685 工作在 \code{/dev/i2c-1}，地址为 \code{0x40}；摄像头读取结果为 \code{opened=True}、\code{read=True}，图像形状为 \code{(480, 640, 3)} 或同等彩色帧。
+
+\imgfig{step02_hardware_check.jpg}{0.86}{第二步硬件检查结果}
+
+\section{模拟模式与真实模式}
+
+模拟模式用于确认网页、摄像头、检测框和状态显示，不驱动真实舵机；真实模式用于交付运行，舵机会根据目标位置变化跟随运动。系统验证流程采用“模拟模式确认目标框稳定、真实模式完成闭环跟踪”的顺序，以降低舵机误动风险。
+
+\imgfig{step03_sim_terminal.jpg}{0.82}{第三步网页模拟模式终端输出}
+\imgfig{step04_real_terminal.jpg}{0.82}{第四步网页真实模式终端输出}
+
+\begin{table}[H]
+  \centering
+  \caption{主要功能测试结果}
+  \label{tab:function-tests}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{p{0.25\linewidth}p{0.47\linewidth}p{0.16\linewidth}}
+    \toprule
+    测试项 & 预期现象 & 结果 \\
+    \midrule
+    摄像头读取 & 能稳定读取彩色图像帧 & 通过 \\
+    PCA9685 扫描 & I2C 地址出现 \code{0x40} 与 \code{0x70} & 通过 \\
+    底层舵机测试 & pan/tilt 能按设定角度动作 & 通过 \\
+    网页模拟模式 & 浏览器显示实时视频与检测框，舵机不动 & 通过 \\
+    网页真实模式 & 目标移动时云台跟随，按钮可控制开始/急停/复位 & 通过 \\
+    自动中心标定 & 将便利贴放中心后可自动生成 HSV 范围 & 通过 \\
+    手势识别扩展 & Web 端可开关手势识别，MediaPipe 后端可用时显示 \code{mediapipe}、手势类别、手指数和置信度 & 通过 \\
+    光流与运动分析 & Web 端可显示光流箭头、轨迹回放、区域热力图和画面质量指标 & 通过 \\
+    日志生成 & 运行后生成 \code{frames.csv}、\code{summary.json} & 通过 \\
+    日志分析 & 自动生成 FPS、误差、角度等曲线图 & 通过 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\chapter{实验结果与分析}
+
+\section{跟踪日志统计}
+
+本次从 OrangePi 回传了三组真实运行日志。三次运行平均 FPS 均稳定在 23 FPS 左右，说明网页监控、视觉处理和舵机控制在当前配置下可以实时运行。第三次运行 \code{20260524_013921} 还完成了日志分析与曲线生成，因此选为代表性实验。
+
+\begin{table}[H]
+  \centering
+  \caption{三次真实跟踪运行统计}
+  \label{tab:tracking-runs}
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{lrrrrrrr}
+    \toprule
+    运行编号 & 帧数 & 找到目标帧 & 找到率 & 平均 FPS & 平均 $|e_x|$ & 平均 $|e_y|$ & 丢失次数 \\
+    \midrule
+    20260524\_012756 & 1616 & 479 & 29.64\% & 23.80 & 76.07 & 36.81 & 0 \\
+    20260524\_013426 & 6381 & 1392 & 21.81\% & 23.85 & 100.83 & 62.12 & 0 \\
+    20260524\_013921 & 2576 & 948 & 36.80\% & 23.11 & 68.91 & 44.70 & 2 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{代表性运行 \code{20260524_013921} 详细指标}
+  \label{tab:tracking-detail}
+  \begin{tabular}{lr}
+    \toprule
+    指标 & 数值 \\
+    \midrule
+    总帧数 & 2576 \\
+    平均 FPS & 23.112 \\
+    目标找到率 & 36.80\% \\
+    平均水平中心误差 & 68.91 px \\
+    平均垂直中心误差 & 44.70 px \\
+    最大水平中心误差 & 307.00 px \\
+    最大垂直中心误差 & 174.00 px \\
+    目标丢失次数 & 2 \\
+    平均重新捕获时间 & 0.764 s \\
+    搜索状态触发次数 & 0 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+找到率并不等同于算法在目标始终可见时的成功率。本次日志来自实际调试过程，过程中存在放下目标、移出画面、调整网页按钮和观察状态等操作，因此找到率偏低。报告同时提供演示视频链接、运行截图、日志摘要和曲线图，用于复核稳定运行效果。
+
+\imgfig{fps_curve.jpg}{0.82}{代表性运行 FPS 曲线}
+\imgfig{center_error_curve.jpg}{0.82}{代表性运行中心误差曲线}
+\imgfig{gimbal_angle_curve.jpg}{0.82}{代表性运行云台角度曲线}
+\imgfig{target_found_curve.jpg}{0.82}{代表性运行目标检测状态曲线}
+\imgfig{step08_analysis_terminal.jpg}{0.82}{第八步日志分析终端结果}
+
+\section{C/C++ wheel 与多后端加速实验}
+
+课程加分项要求将一个耗时模块使用 C/C++ 实现并编译为 wheel，同时保留 Python 版本进行性能对比。本项目选择视觉链路中的二值 mask 形态学开闭运算作为实验对象，分别实现纯 Python、OpenCV、C++/pybind11 wheel 和 pymp 后端。第 5 步终端结果显示 C++ wheel 成功编译、安装并导入，模块说明输出为 \code{Binary morphology accelerator for the OrangePi tracking project}。
+
+\begin{table}[H]
+  \centering
+  \caption{第 5 步 C++ wheel benchmark 结果}
+  \label{tab:cpp-benchmark}
+  \begin{tabular}{lrrr}
+    \toprule
+    后端 & 平均耗时/ms 每帧 & 相对 Python 加速比 & 输出是否匹配 OpenCV \\
+    \midrule
+    Python & 57.301 & 1.00x & 是 \\
+    OpenCV & 0.044 & 1291.67x & 是 \\
+    C++ wheel & 0.353 & 162.54x & 是 \\
+    pymp & 356.775 & 0.16x & 是 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\imgfig{step05_cpp_benchmark.jpg}{0.98}{第五步 C++ wheel 编译与 benchmark 结果}
+\imgfig{step06_pymp_benchmark.jpg}{0.82}{第六步 pymp benchmark 结果}
+
+实验结论是：C++ wheel 相比纯 Python 有明显加速，并且输出结果与 OpenCV 一致，说明加分项的“C/C++ 实现 + wheel 封装 + Python 调用”已经跑通；但 OpenCV 仍然最快，这是因为 OpenCV 的形态学算子本身已经是高度优化的 C/C++ 实现，而本项目自写 C++ wheel 在小图像、小卷积核条件下存在 Python/C++ 边界调用开销。pymp 在本任务中更慢，说明并行框架启动和数据同步开销远大于计算收益，这也验证了不能简单依赖 Python thread 或粗粒度并行来提升小任务速度。
+
+\section{mock 云端上传}
+
+第 7 步脚本启动本地 mock 云端服务，将最新跟踪摘要、benchmark 结果和设备信息打包为 JSON payload 后通过 HTTP POST 上传。回传数据中可见 \code{cloud_uploads/20260524_014352_20260524_013921.json}，说明服务端已收到本次运行数据。
+
+\begin{table}[H]
+  \centering
+  \caption{mock 云端上传 payload 摘要}
+  \label{tab:cloud-payload}
+  \small
+  \begin{tabular}{ll}
+    \toprule
+    字段 & 内容 \\
+    \midrule
+    设备 & \code{orangepi5pro} \\
+    运行编号 & \code{20260524_013921} \\
+    上传时间 & \code{2026-05-24T01:43:52} \\
+    跟踪摘要 & 帧数、找到率、FPS、误差、丢失次数、重捕获时间 \\
+    benchmark 摘要 & OpenCV、C++ wheel、pymp 后端耗时与一致性 \\
+    分析文件 & \code{frames.csv}、\code{summary.json}、\code{analysis} 目录 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\imgfig{step07_cloud_1.jpg}{0.86}{第七步 mock 云端上传终端结果（一）}
+\imgfig{step07_cloud_2.jpg}{0.86}{第七步 mock 云端上传终端结果（二）}
+
+\chapter{创新点与课程要求对应}
+
+\section{创新点 1：C/C++ wheel 视觉算子}
+
+项目在 \code{cpp_accel} 目录下使用 C++ 和 pybind11 实现了二值 mask 形态学处理算子，并通过 \code{setup.py bdist_wheel} 生成 wheel。Python 主程序可以选择 \code{cpp} 后端调用该模块。该创新点直接服务于主线视觉流程，因为形态学开闭运算位于 HSV 分割之后、轮廓筛选之前，是视觉检测链路中的真实功能块。
+
+\section{创新点 2：网页控制台与网络编程}
+
+网页控制台不是额外摆设，而是系统主入口。OrangePi 端提供 HTTP 服务、MJPEG 视频流和 JSON API，电脑端通过浏览器完成监看与控制。该设计避免了 X11 转发不稳定的问题，也能同时展示原始画面、检测框、目标中心、云台状态和 HSV 数据。
+
+\section{创新点 3：pymp 并行对比}
+
+项目实现了 pymp 后端并进行实际 benchmark。实验表明，pymp 对这种小尺寸图像、短耗时算子并不适合，反而因为进程/线程调度和共享数组开销导致速度下降。该结果本身具有实验价值：它说明任务加速需要结合任务粒度选择方案，而不是简单把循环并行化。
+
+\section{创新点 4：mock 云端服务}
+
+项目实现了 mock 云端上传流程，将跟踪日志摘要和 benchmark 结果结构化上传。当前服务端运行在本地 mock 环境，接口形式与真实云端上传保持一致，替换 endpoint 后即可接入远程服务器或云数据库。
+
+\section{创新点 5：云台安全保护}
+
+真实舵机系统的安全性比纯软件任务更重要。系统实现了角度限位、单帧限幅、死区抑制、急停、平滑复位、PWM 释放和启动不乱动等保护，避免舵机持续顶死、突然大幅运动或复位卡壳。该部分对系统稳定性有直接帮助。
+
+\section{创新点 6：手势识别与运动可视化}
+
+在稳定跟踪主线之外，项目增加了手势识别和运动可视化扩展。手势识别最终采用 MediaPipe Hands 作为优先后端，通过预训练手部关键点模型提取 21 个手部 landmark，再根据指尖和关节相对位置估计手指数；当 MediaPipe 不可用时，系统自动回退到肤色分割、轮廓筛选、凸包和凸缺陷统计方案。Web 端可以独立开关该模块，并显示识别后端、手势类别、手指数和置信度等信息。运动可视化部分则把光流箭头、轨迹回放、区域热力图、画面质量指标和事件日志整合到浏览器界面中，使系统不仅能“跟踪目标”，也能展示目标运动过程和画面状态。
+
+\chapter{问题分析与改进方向}
+
+\section{当前问题}
+
+从回传日志和调试过程看，系统主线已经跑通，同时也暴露出三个改进点。第一，找到率偏低，主要与调试过程中目标并非始终处于画面内有关；该指标用于反映完整调试过程，不单独代表目标持续可见时的稳定跟踪能力。第二，HSV 颜色跟踪对光照和背景同色干扰仍然敏感，因此实际运行时使用纯色便利贴并尽量避开同色背景。第三，C++ wheel 相对纯 Python 加速明显，但仍慢于 OpenCV，说明进一步提升速度时应优先使用 OpenCV，或将更大粒度的视觉流程整体迁移到 C++，减少跨语言调用次数。
+
+\section{改进方向}
+
+项目改进方向包括四个方面：一是采集目标始终处于画面内的标准运行日志，进一步量化稳定跟踪能力；二是在视觉检测中加入颜色直方图或模板匹配辅助，提高对光照变化的鲁棒性；三是将 C++ 加速对象从单个形态学算子扩大到“阈值分割 + 形态学 + 候选框筛选”组合模块；四是完善手势命令映射，例如用手势触发开始、急停、复位、清空轨迹或切换可视化图层，使网页控制台具备更完整的人机交互能力。
+
+\section{演示视频与项目链接}
+
+为便于老师复核实际运行效果，最终演示视频已上传至百度网盘：
+
+\begin{center}
+  \url{https://pan.baidu.com/s/1XZiJAh4sCwHBI5ZsC6_X-w?pwd=fva9}
+\end{center}
+
+项目代码已整理到 GitHub 仓库，包含主程序、配置文件、运行脚本、接线表、测试命令文档和单元测试：
+
+\begin{center}
+  \url{https://github.com/yys806/zb_tracker_project}
+\end{center}
+
+\chapter{总结}
+
+本项目已经完成了基于 OrangePi 的两自由度云台目标跟踪系统。系统能够在 OrangePi 端读取摄像头图像，通过 HSV 颜色检测识别便利贴目标，并通过 PCA9685 控制 pan/tilt 双舵机，使目标尽量保持在画面中心。网页控制台将实时视频、检测框、状态信息和安全控制集成到浏览器中，使系统具备较好的交付运行能力。
+
+实验方面，系统在真实网页跟踪模式下达到约 23 FPS，代表性运行平均水平误差为 68.91 像素、平均垂直误差为 44.70 像素，丢失后平均重捕获时间约 0.76 秒。加分项方面，C++ wheel 成功封装并调用，输出与 OpenCV 一致；网页控制台、手势识别、运动可视化、pymp 对比、mock 云端上传和云台安全保护均已形成可运行证据。整体来看，项目已经形成了“硬件搭建清楚、软件主线完整、远程演示可用、实验结果可量化、创新点有证据”的课程大作业成果。
+
+\end{document}

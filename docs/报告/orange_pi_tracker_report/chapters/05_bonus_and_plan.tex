@@ -1,0 +1,54 @@
+\chapter{加分项完成情况与后续计划}
+
+\section{C/C++ 功能块加速}
+
+课程加分项要求将一个耗时功能块用 C 或 C++ 实现，并编译为 wheel 供 Python 调用，同时提供对应 Python 实现进行性能对比。当前项目已经将二值掩膜的形态学开闭运算作为加速对象，准备了三种实现：
+
+\begin{itemize}
+  \item \textbf{纯 Python 实现}：位于 \texttt{tracker.py} 中的 \texttt{pure\_python\_open\_close}；
+  \item \textbf{OpenCV 实现}：位于 \texttt{tracker.py} 中的 \texttt{opencv\_open\_close}；
+  \item \textbf{C++ 实现}：位于 \texttt{cpp\_accel/src/morphology\_ext.cpp}，通过 pybind11 暴露 \texttt{open\_close\_mask} 接口。
+\end{itemize}
+
+后续需要在 OrangePi 上执行 \texttt{bdist\_wheel} 构建，并运行 \texttt{scripts/benchmark\_morphology.py}，记录纯 Python、C++ 与 OpenCV 版本在相同输入上的平均单帧耗时、输出一致性和加速比。该部分是当前最优先补充的量化加分项。
+
+\section{网络编程与远程服务}
+
+项目已经实现基于 HTTP/MJPEG 的网页监控模式，能够在电脑或手机浏览器中查看 OrangePi 实时处理后的图像流。该功能属于网络编程在嵌入式调试场景中的应用，解决了远程 SSH 环境下 OpenCV 窗口不稳定的问题。
+
+后续可进一步扩展为轻量云端服务，例如：
+
+\begin{enumerate}
+  \item 将每次运行的 summary 数据自动上传到飞书表格；
+  \item 在网页中加入实时状态面板和 FPS/误差曲线；
+  \item 支持通过网页按钮执行回中、暂停、开始跟踪等操作。
+\end{enumerate}
+
+\section{并行加速与 pymp}
+
+课程提示中提到 Python thread 由于 GIL 限制难以真正提升 CPU 密集任务速度，建议使用 pymp。当前项目尚未引入 pymp。结合本项目特点，后续可将纯 Python 形态学处理或候选区域统计改写为 pymp 并行版本，形成如下对比：
+
+\begin{equation}
+  \text{Pure Python} \quad vs \quad \text{pymp} \quad vs \quad \text{C++ wheel} \quad vs \quad \text{OpenCV}
+\end{equation}
+
+考虑到本项目已经有 C++ 扩展路线，pymp 可作为第二加速实验，不建议优先于 C++ wheel。
+
+\section{DNN 与 RKNN 部署}
+
+DNN/RKNN 方向目前尚未完成。原因是当前项目的主线目标是稳定闭环演示，而 DNN/RKNN 需要额外完成模型选择、数据准备、模型转换、板端部署和性能调试，工作量较大，且可能影响现有传统视觉闭环的稳定性。因此本阶段将 RKNN 作为后续扩展方向，不作为当前验收主路径。
+
+若后续时间允许，可考虑使用轻量检测模型识别特定标记物或物体类别，并通过 RKNN-Toolkit 转换部署到 RK3588S NPU 上，实现传统视觉与轻量 DNN 的对比。
+
+\section{下一阶段计划}
+
+下一阶段建议按以下顺序推进：
+
+\begin{enumerate}
+  \item 在 OrangePi 上完成 C++ 扩展 wheel 构建与性能对比，补充表格和图表；
+  \item 优化网页监控稳定性，限制推流帧率，降低 CPU 占用；
+  \item 增加日志图表生成脚本，输出 FPS、误差和舵机角度曲线；
+  \item 补充一段稳定演示视频，包括静止目标、慢速移动、短暂遮挡和重新捕获；
+  \item 根据实验结果完善最终报告和答辩 PPT。
+\end{enumerate}
+

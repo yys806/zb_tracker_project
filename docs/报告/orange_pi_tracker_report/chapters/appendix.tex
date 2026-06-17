@@ -1,0 +1,52 @@
+\chapter{附录}
+
+\section{常用运行命令}
+
+摄像头无窗口读取测试：
+
+\begin{verbatim}
+python - <<'PY'
+import cv2
+cap = cv2.VideoCapture(0)
+print("opened:", cap.isOpened())
+ok, frame = cap.read()
+print("read:", ok, "shape:", None if frame is None else frame.shape)
+cap.release()
+PY
+\end{verbatim}
+
+网页模拟模式：
+
+\begin{verbatim}
+PYTHONPATH=/home/orangepi/zb/tracker_project/src \
+/home/orangepi/.venvs/zb/bin/python main.py --mode web --simulate
+\end{verbatim}
+
+网页真实闭环模式：
+
+\begin{verbatim}
+sudo PYTHONPATH=/home/orangepi/zb/tracker_project/src \
+/home/orangepi/.venvs/zb/bin/python main.py --mode web
+\end{verbatim}
+
+C++ 扩展构建与性能测试：
+
+\begin{verbatim}
+cd ~/zb/tracker_project/cpp_accel
+/home/orangepi/.venvs/zb/bin/python setup.py bdist_wheel
+/home/orangepi/.venvs/zb/bin/pip install dist/*.whl --force-reinstall
+cd ~/zb/tracker_project
+PYTHONPATH=src /home/orangepi/.venvs/zb/bin/python \
+scripts/benchmark_morphology.py --config configs/default_config.json --frames 300
+\end{verbatim}
+
+\section{随附材料}
+
+随附材料包括：
+
+\begin{itemize}
+  \item \texttt{figures/servo\_test\_video.mp4}：舵机测试视频；
+  \item \texttt{figures/tracking\_test\_video.mp4}：目标跟踪测试视频；
+  \item 项目 GitHub 仓库：\texttt{https://github.com/yys806/zb\_tracker\_project}。
+\end{itemize}
+
