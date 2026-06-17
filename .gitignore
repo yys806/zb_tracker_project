@@ -9,6 +9,9 @@ dist/
 *.whl
 .venv/
 venv/
+.env
+.env.local
+.env.*.local
 .pytest_cache/
 logs/
 benchmark_results/
@@ -21,3 +24,4 @@ cloud_uploads/
 python
 .DS_Store
 Thumbs.db
+~$*

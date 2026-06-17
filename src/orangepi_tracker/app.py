@@ -29,6 +29,9 @@ LOCK_HOLD_RELEASE_PX = 22.0
 LOCK_HOLD_MOTION_PX = 6.0
 SERVO_MOVE_EPSILON_DEG = 1e-4
 MIN_CONFIDENCE_FOR_SERVO = 0.25
+GESTURE_TRACKING_REQUIRED_FRAMES = 8
+GESTURE_TRACKING_LOST_TIMEOUT_S = 1.0
+INDEX_FINGER_TIP = 8
 
 
 class TrackingApplication:
@@ -73,6 +76,12 @@ class TrackingApplication:
         self.flow_vectors_visible = False
         self.last_gesture = GestureDetection(enabled=config.gesture.enabled)
         self.last_gesture_ms = 0.0
+        self.gesture_tracking_enabled = False
+        self.gesture_tracking_label: str | None = None
+        self.gesture_tracking_frames = 0
+        self.gesture_tracking_required_frames = GESTURE_TRACKING_REQUIRED_FRAMES
+        self.gesture_tracking_last_seen_at = 0.0
+        self.gesture_tracking_lost_timeout_s = GESTURE_TRACKING_LOST_TIMEOUT_S
         self.last_motion = MotionMetrics(enabled=True)
         self.last_motion_ms = 0.0
         self.last_quality = QualityMetrics()
@@ -324,6 +333,75 @@ class TrackingApplication:
         if len(self.event_log) > 50:
             self.event_log = self.event_log[-50:]
 
+    def _gesture_label_stable(self, gesture: GestureDetection, label: str) -> bool:
+        if not gesture.enabled or not gesture.found or gesture.label != label:
+            if self.gesture_tracking_label == label:
+                self.gesture_tracking_frames = 0
+                self.gesture_tracking_label = None
+            return False
+        if self.gesture_tracking_label == label:
+            self.gesture_tracking_frames += 1
+        else:
+            self.gesture_tracking_label = label
+            self.gesture_tracking_frames = 1
+        return self.gesture_tracking_frames >= max(1, int(self.gesture_tracking_required_frames))
+
+    def _fingertip_detection_from_gesture(self, gesture: GestureDetection) -> TargetDetection | None:
+        if len(gesture.landmarks) <= INDEX_FINGER_TIP:
+            return None
+        x, y = gesture.landmarks[INDEX_FINGER_TIP]
+        return TargetDetection(
+            found=True,
+            center_x=int(x),
+            center_y=int(y),
+            bbox=(max(0, int(x) - 8), max(0, int(y) - 8), 16, 16),
+            area=256.0,
+            confidence=max(gesture.confidence, 0.8),
+            message="gesture fingertip target",
+        )
+
+    def _update_gesture_tracking_unlocked(self, gesture: GestureDetection, now: float) -> TargetDetection | None:
+        if self._gesture_label_stable(gesture, "ok") and self.gesture_tracking_enabled:
+            self.gesture_tracking_enabled = False
+            self.tracking_enabled = False
+            self.emergency_stop = True
+            self._reset_state_machine()
+            self._reset_hold_lock()
+            self.hardware.release()
+            time.sleep(0.08)
+            self._reset_gimbal(settle=True)
+            time.sleep(0.12)
+            self.hardware.release()
+            self.last_message = "OK gesture stopped fingertip tracking and reset gimbal"
+            self._push_event("gesture-track", self.last_message)
+            return None
+
+        fingertip = self._fingertip_detection_from_gesture(gesture)
+        if self._gesture_label_stable(gesture, "one") and fingertip is not None:
+            if not self.gesture_tracking_enabled:
+                self.gesture_tracking_enabled = True
+                self.tracking_enabled = True
+                self.emergency_stop = False
+                self._reset_state_machine()
+                self._reset_hold_lock()
+                self.last_message = "one gesture started fingertip tracking"
+                self._push_event("gesture-track", self.last_message)
+            self.gesture_tracking_last_seen_at = now
+
+        if not self.gesture_tracking_enabled:
+            return None
+        if fingertip is not None and gesture.label == "one":
+            self.gesture_tracking_last_seen_at = now
+            return fingertip
+        if self.gesture_tracking_last_seen_at > 0.0 and now - self.gesture_tracking_last_seen_at > float(self.gesture_tracking_lost_timeout_s):
+            self.gesture_tracking_enabled = False
+            self.tracking_enabled = False
+            self._reset_state_machine()
+            self._reset_hold_lock()
+            self.last_message = "fingertip target lost; gesture tracking stopped"
+            self._push_event("gesture-track", self.last_message)
+        return None
+
     def _build_console_status_unlocked(self) -> dict:
         detection = self.last_detection
         flow = self.last_flow
@@ -355,6 +433,7 @@ class TrackingApplication:
             "adaptive_hsv_enabled": self.config.tracker.adaptive_hsv_enabled,
             "backend": self.config.tracker.backend,
             "tracking_enabled": self.tracking_enabled,
+            "gesture_tracking_enabled": self.gesture_tracking_enabled,
             "color_ready": self.color_ready,
             "emergency_stop": self.emergency_stop,
             "hardware": "mock" if isinstance(self.hardware, MockPanTiltHardware) else "real",
@@ -429,6 +508,7 @@ class TrackingApplication:
                 "adaptive_hsv_enabled": self.config.tracker.adaptive_hsv_enabled,
                 "backend": self.config.tracker.backend,
                 "tracking_enabled": self.tracking_enabled,
+                "gesture_tracking_enabled": self.gesture_tracking_enabled,
                 "color_ready": self.color_ready,
                 "emergency_stop": self.emergency_stop,
                 "hardware": "mock" if isinstance(self.hardware, MockPanTiltHardware) else "real",
@@ -456,6 +536,9 @@ class TrackingApplication:
         gesture_start = time.perf_counter()
         gesture = self.gesture_recognizer.detect(frame)
         gesture_ms = (time.perf_counter() - gesture_start) * 1000.0
+        gesture_target = self._update_gesture_tracking_unlocked(gesture, time.perf_counter())
+        if gesture_target is not None:
+            detection = gesture_target
         quality_start = time.perf_counter()
         self.last_quality = QualityMetrics(**self.quality_analyzer.update(frame))
         self.last_quality_ms = (time.perf_counter() - quality_start) * 1000.0
@@ -638,6 +721,8 @@ class TrackingApplication:
             "solidity": round(gesture.solidity, 3),
             "extent": round(gesture.extent, 3),
             "gesture_time_ms": round(self.last_gesture_ms, 2),
+            "landmarks": gesture.landmarks,
+            "connections": gesture.connections,
         }
 
     def _log_frame(

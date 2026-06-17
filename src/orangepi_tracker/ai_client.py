@@ -8,7 +8,7 @@ import urllib.request
 
 DEEPSEEK_API_KEY = ""
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
-DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_MODEL = "deepseek-v4-flash"
 
 
 class DeepSeekClient:

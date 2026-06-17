@@ -4,3 +4,4 @@ pybind11
 pymp-pypi
 matplotlib
 wheel
+smbus2

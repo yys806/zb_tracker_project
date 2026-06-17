@@ -51,4 +51,5 @@ echo "[04] web console real mode"
 echo "[04] browser: http://<OrangePi-IP>:$PORT"
 echo "[04] jpeg=$JPEG fps=$FPS"
 echo "[04] real servos will move; use web STOP button if needed"
-sudo env PYTHONPATH=src "$PYTHON_BIN" main.py "${ARGS[@]}"
+mapfile -t SUDO_ENV_ARGS < <(sudo_env_args)
+sudo env "${SUDO_ENV_ARGS[@]}" "$PYTHON_BIN" main.py "${ARGS[@]}"

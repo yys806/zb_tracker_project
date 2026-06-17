@@ -7,6 +7,8 @@ import numpy as np
 
 
 BBox = Tuple[int, int, int, int]
+Point = Tuple[int, int]
+Connection = Tuple[int, int]
 
 
 @dataclass(slots=True)
@@ -37,6 +39,8 @@ class GestureDetection:
     defects: int = 0
     solidity: float = 0.0
     extent: float = 0.0
+    landmarks: list[Point] = field(default_factory=list)
+    connections: list[Connection] = field(default_factory=list)
 
 
 @dataclass(slots=True)

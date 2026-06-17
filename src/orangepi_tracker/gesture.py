@@ -14,6 +14,15 @@ from .types import GestureDetection
 class GestureRecognizer:
     config: GestureConfig
 
+    HAND_CONNECTIONS = (
+        (0, 1), (1, 2), (2, 3), (3, 4),
+        (0, 5), (5, 6), (6, 7), (7, 8),
+        (5, 9), (9, 10), (10, 11), (11, 12),
+        (9, 13), (13, 14), (14, 15), (15, 16),
+        (13, 17), (17, 18), (18, 19), (19, 20),
+        (0, 17),
+    )
+
     def __post_init__(self) -> None:
         self._last_label = "none"
         self._last_finger_count = 0
@@ -149,7 +158,7 @@ class GestureRecognizer:
         center_y = int(round(sum(ys) / len(ys)))
         finger_states = self._mediapipe_finger_states(points)
         finger_count = sum(1 for item in finger_states if item)
-        label = self._label_for_fingers(finger_count, solidity=0.0, extent=0.0)
+        label = self._classify_mediapipe_gesture(points, finger_states)
         label, finger_count = self._stabilize(label, finger_count)
         confidence = self._mediapipe_confidence(result)
         return GestureDetection(
@@ -166,6 +175,8 @@ class GestureRecognizer:
             defects=max(0, finger_count - 1),
             solidity=0.0,
             extent=0.0,
+            landmarks=points,
+            connections=list(self.HAND_CONNECTIONS),
         )
 
     def _mediapipe_finger_states(self, points: list[tuple[int, int]]) -> list[bool]:
@@ -178,14 +189,83 @@ class GestureRecognizer:
 
         states: list[bool] = []
         if vertical:
-            states.append(abs(points[4][0] - points[2][0]) > palm_height * 0.34 and points[4][0] < points[3][0])
+            thumb_tip = points[4]
+            thumb_ip = points[3]
+            thumb_mcp = points[2]
+            index_mcp = points[5]
+            pinky_mcp = points[17]
+            palm_mid_x = (index_mcp[0] + pinky_mcp[0]) / 2.0
+            thumb_side = -1.0 if thumb_mcp[0] < palm_mid_x else 1.0
+            tip_side_distance = (thumb_tip[0] - thumb_mcp[0]) * thumb_side
+            ip_side_distance = (thumb_ip[0] - thumb_mcp[0]) * thumb_side
+            tip_is_outside_palm = (thumb_tip[0] - palm_mid_x) * thumb_side > palm_height * 0.18
+            thumb_extended = (
+                tip_side_distance > max(palm_height * 0.28, ip_side_distance + palm_height * 0.08)
+                and abs(thumb_tip[1] - thumb_mcp[1]) < palm_height * 0.72
+                and thumb_tip[1] <= thumb_mcp[1] + palm_height * 0.18
+                and tip_is_outside_palm
+            )
+            states.append(bool(thumb_extended))
             for tip, pip in [(8, 6), (12, 10), (16, 14), (20, 18)]:
                 states.append(points[tip][1] < points[pip][1] - palm_height * 0.06)
         else:
-            for tip, pip in [(4, 2), (8, 6), (12, 10), (16, 14), (20, 18)]:
+            thumb_tip = points[4]
+            thumb_mcp = points[2]
+            thumb_extended = abs(thumb_tip[0] - wrist_x) > abs(thumb_mcp[0] - wrist_x) + palm_height * 0.10
+            states.append(bool(thumb_extended))
+            for tip, pip in [(8, 6), (12, 10), (16, 14), (20, 18)]:
                 states.append(abs(points[tip][0] - wrist_x) > abs(points[pip][0] - wrist_x) + palm_height * 0.05)
         return states
 
+    def _classify_mediapipe_gesture(self, points: list[tuple[int, int]], finger_states: list[bool]) -> str:
+        if len(points) < 21 or len(finger_states) < 5:
+            return "none"
+        thumb, index, middle, ring, pinky = finger_states[:5]
+        finger_count = sum(1 for item in finger_states if item)
+
+        thumb_index = self._distance(points[4], points[8])
+        thumb_middle = self._distance(points[4], points[12])
+        index_middle = self._distance(points[8], points[12])
+        palm_scale = self._palm_scale(points)
+
+        if thumb_index < palm_scale * 0.36 and middle and ring and pinky:
+            return "ok"
+        if thumb_index < palm_scale * 0.42 and thumb_middle < palm_scale * 0.45 and index_middle < palm_scale * 0.38 and not ring and not pinky:
+            return "seven"
+        if thumb and pinky and not index and not middle and not ring:
+            return "six"
+        if thumb and index and not middle and not ring and not pinky:
+            return "eight"
+        if index and middle and ring and pinky and self._thumb_partly_open_for_five(points):
+            return "five"
+        if finger_count == 5:
+            return "five"
+        return self._label_for_fingers(finger_count, solidity=0.0, extent=0.0)
+
+    def _thumb_partly_open_for_five(self, points: list[tuple[int, int]]) -> bool:
+        if len(points) < 18:
+            return False
+        wrist = points[0]
+        thumb_mcp = points[2]
+        thumb_tip = points[4]
+        middle_mcp = points[9]
+        vertical = abs(wrist[1] - middle_mcp[1]) >= abs(wrist[0] - middle_mcp[0])
+        if vertical:
+            return thumb_tip[1] < (wrist[1] + thumb_mcp[1]) / 2.0
+        return abs(thumb_tip[0] - wrist[0]) > abs(thumb_mcp[0] - wrist[0]) + self._palm_scale(points) * 0.02
+
+    def _palm_scale(self, points: list[tuple[int, int]]) -> float:
+        if len(points) < 18:
+            return 80.0
+        wrist = points[0]
+        middle_mcp = points[9]
+        index_mcp = points[5]
+        pinky_mcp = points[17]
+        return max(30.0, self._distance(wrist, middle_mcp), self._distance(index_mcp, pinky_mcp) * 1.35)
+
+    @staticmethod
+    def _distance(a: tuple[int, int], b: tuple[int, int]) -> float:
+        return math.hypot(float(a[0] - b[0]), float(a[1] - b[1]))
     def _mediapipe_confidence(self, result) -> float:
         handedness = getattr(result, "multi_handedness", None)
         if handedness:

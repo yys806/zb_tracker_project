@@ -26,7 +26,7 @@ from orangepi_tracker.config import (
     UIConfig,
     default_color_presets,
 )
-from orangepi_tracker.types import TargetDetection
+from orangepi_tracker.types import GestureDetection, TargetDetection
 
 
 class FakeCamera:
@@ -518,6 +518,123 @@ class ApplicationRuntimeTests(unittest.TestCase):
         self.assertTrue(status["enabled"])
         self.assertIn("found", status)
         self.assertIn("gesture_time_ms", status)
+
+    def test_gestures_are_status_only_and_do_not_control_tracking(self) -> None:
+        app = self.make_app()
+        app.set_color("red")
+        app.set_gesture_enabled(True)
+        app.tracker.detect = lambda frame: TargetDetection(found=False)
+
+        app.gesture_recognizer.detect = lambda frame: GestureDetection(
+            enabled=True,
+            found=True,
+            label="ok",
+            backend="mediapipe",
+            confidence=0.9,
+        )
+
+        frame = np.zeros((120, 160, 3), dtype=np.uint8)
+        for _ in range(13):
+            app._process_frame(frame, 1.0 / 30.0)
+
+        self.assertFalse(app.tracking_enabled)
+        self.assertFalse(app.emergency_stop)
+        self.assertEqual(app.last_gesture.label, "ok")
+        command_events = [event for event in app.event_log if event.kind == "gesture-command"]
+        self.assertEqual(command_events, [])
+
+    def test_one_gesture_starts_tracking_index_fingertip(self) -> None:
+        with (
+            patch.object(app_module, "OpenCVCamera", return_value=FakeCamera()),
+            patch.object(app_module, "create_hardware", side_effect=lambda hardware, control: CountingHardware(control)),
+        ):
+            app = app_module.TrackingApplication(self.make_config())
+        app.set_gesture_enabled(True)
+        app.gesture_tracking_required_frames = 2
+        points = [(80, 60)] * 21
+        points[8] = (80, 10)
+        app.gesture_recognizer.detect = lambda frame: GestureDetection(
+            enabled=True,
+            found=True,
+            label="one",
+            finger_count=1,
+            backend="mediapipe",
+            confidence=0.9,
+            landmarks=points,
+        )
+
+        frame = np.zeros((120, 160, 3), dtype=np.uint8)
+        app._process_frame(frame, 1.0 / 30.0)
+        self.assertFalse(app.gesture_tracking_enabled)
+
+        detection, _, control_output, *_ = app._process_frame(frame, 1.0 / 30.0)
+
+        self.assertTrue(app.gesture_tracking_enabled)
+        self.assertTrue(app.tracking_enabled)
+        self.assertTrue(detection.found)
+        self.assertEqual((detection.center_x, detection.center_y), (80, 10))
+        self.assertIsNotNone(control_output)
+        self.assertTrue(app.hardware.moves)
+
+    def test_ok_gesture_stops_fingertip_tracking_and_resets(self) -> None:
+        with (
+            patch.object(app_module, "OpenCVCamera", return_value=FakeCamera()),
+            patch.object(app_module, "create_hardware", side_effect=lambda hardware, control: CountingHardware(control)),
+            patch.object(app_module.time, "sleep", return_value=None),
+        ):
+            app = app_module.TrackingApplication(self.make_config())
+        app.set_gesture_enabled(True)
+        app.gesture_tracking_required_frames = 2
+        app.gesture_tracking_enabled = True
+        app.tracking_enabled = True
+        app.controller.current_pan = 130.0
+        app.controller.current_tilt = 140.0
+        app.hardware.move_to(130.0, 140.0)
+        app.gesture_recognizer.detect = lambda frame: GestureDetection(
+            enabled=True,
+            found=True,
+            label="ok",
+            finger_count=3,
+            backend="mediapipe",
+            confidence=0.9,
+            landmarks=[(80, 60)] * 21,
+        )
+
+        frame = np.zeros((120, 160, 3), dtype=np.uint8)
+        app._process_frame(frame, 1.0 / 30.0)
+        self.assertTrue(app.gesture_tracking_enabled)
+
+        app._process_frame(frame, 1.0 / 30.0)
+
+        self.assertFalse(app.gesture_tracking_enabled)
+        self.assertFalse(app.tracking_enabled)
+        self.assertTrue(app.emergency_stop)
+        self.assertAlmostEqual(app.controller.current_pan, app.config.control.pan_center)
+        self.assertAlmostEqual(app.controller.current_tilt, app.config.control.tilt_center)
+
+    def test_fist_no_longer_stops_fingertip_tracking(self) -> None:
+        app = self.make_app()
+        app.set_gesture_enabled(True)
+        app.gesture_tracking_required_frames = 2
+        app.gesture_tracking_enabled = True
+        app.tracking_enabled = True
+        app.gesture_recognizer.detect = lambda frame: GestureDetection(
+            enabled=True,
+            found=True,
+            label="fist",
+            finger_count=0,
+            backend="mediapipe",
+            confidence=0.9,
+            landmarks=[(80, 60)] * 21,
+        )
+
+        frame = np.zeros((120, 160, 3), dtype=np.uint8)
+        app._process_frame(frame, 1.0 / 30.0)
+        app._process_frame(frame, 1.0 / 30.0)
+
+        self.assertTrue(app.gesture_tracking_enabled)
+        self.assertTrue(app.tracking_enabled)
+        self.assertFalse(app.emergency_stop)
 
 
 if __name__ == "__main__":

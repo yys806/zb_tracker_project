@@ -28,14 +28,22 @@ def draw_overlay(
         cv2.circle(output, (detection.center_x, detection.center_y), 5, (0, 255, 255), -1)
         cv2.putText(output, f"area={detection.area:.0f} conf={detection.confidence:.2f}", (x, max(20, y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
-    if gesture is not None and gesture.enabled and gesture.found and gesture.bbox is not None:
-        gx, gy, gw, gh = gesture.bbox
-        cv2.rectangle(output, (gx, gy), (gx + gw, gy + gh), (255, 170, 40), 2)
-        cv2.circle(output, (gesture.center_x, gesture.center_y), 5, (255, 220, 80), -1)
+    if gesture is not None and gesture.enabled and gesture.found:
+        label_x = max(8, min(w - 150, gesture.center_x + 10))
+        label_y = max(24, min(h - 12, gesture.center_y + 24))
+        if gesture.landmarks:
+            for start_idx, end_idx in gesture.connections:
+                if start_idx >= len(gesture.landmarks) or end_idx >= len(gesture.landmarks):
+                    continue
+                cv2.line(output, gesture.landmarks[start_idx], gesture.landmarks[end_idx], (255, 170, 40), 2, cv2.LINE_AA)
+            for point in gesture.landmarks:
+                cv2.circle(output, point, 4, (255, 230, 90), -1, cv2.LINE_AA)
+        else:
+            cv2.circle(output, (gesture.center_x, gesture.center_y), 6, (255, 220, 80), -1)
         cv2.putText(
             output,
             f"gesture={gesture.label} fingers={gesture.finger_count} conf={gesture.confidence:.2f}",
-            (gx, min(h - 12, gy + gh + 20)),
+            (label_x, label_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.52,
             (255, 220, 80),

@@ -7,6 +7,36 @@ VENV_ROOT="${VENV_ROOT:-$HOME/.venvs/zb}"
 PYTHON_BIN="${PYTHON_BIN:-$VENV_ROOT/bin/python}"
 PIP_BIN="${PIP_BIN:-$VENV_ROOT/bin/pip}"
 
+load_local_env() {
+  local env_file="$PROJECT_ROOT/.env.local"
+  if [ -f "$env_file" ]; then
+    local clean_env_file
+    clean_env_file="$(mktemp)"
+    tr -d '\r' < "$env_file" > "$clean_env_file"
+    set -a
+    # shellcheck disable=SC1090
+    source "$clean_env_file"
+    set +a
+    rm -f "$clean_env_file"
+  fi
+}
+
+sudo_env_args() {
+  local args=("PYTHONPATH=src")
+  if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+    args+=("DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY")
+  fi
+  if [ -n "${DEEPSEEK_API_BASE:-}" ]; then
+    args+=("DEEPSEEK_API_BASE=$DEEPSEEK_API_BASE")
+  fi
+  if [ -n "${DEEPSEEK_MODEL:-}" ]; then
+    args+=("DEEPSEEK_MODEL=$DEEPSEEK_MODEL")
+  fi
+  printf '%s\n' "${args[@]}"
+}
+
+load_local_env
+
 if [ ! -x "$PYTHON_BIN" ]; then
   echo "[common] cannot find virtualenv python: $PYTHON_BIN"
   echo "[common] creating virtualenv at $VENV_ROOT"

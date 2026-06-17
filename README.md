@@ -2,7 +2,7 @@
 
 本项目为“综合设计实践 B”课程大作业成果，完成了基于 OrangePi 5 Pro / RK3588S、USB 摄像头、PCA9685 舵机驱动板和两自由度云台的实时目标跟踪系统。系统在 OrangePi 端完成图像采集、目标检测、云台控制、状态记录和网页监控，能够识别高对比便利贴目标，并驱动 pan / tilt 双舵机使目标中心保持在画面中心附近。
 
-项目主入口为网页控制台。浏览器端可查看实时视频、检测框、目标中心、画面中心线、FPS、目标误差、云台角度、HSV 信息、目标面积和置信度，并可执行中心自动标定、开始跟踪、急停和复位操作。系统同时实现了 C++ wheel 视觉算子加速、pymp 并行对比、mock 云端上传、手势识别与运动可视化等扩展功能，形成了可演示、可复现、可量化分析的课程提交版本。
+项目主入口为网页控制台。浏览器端可查看实时视频、检测框、目标中心、画面中心线、FPS、目标误差、云台角度、HSV 信息、目标面积和置信度，并可执行中心自动标定、开始跟踪、急停和复位操作。系统同时实现了 C++ wheel 视觉算子加速、pymp 并行对比、mock 云端上传、手势识别、指尖云台跟踪与运动可视化等扩展功能，形成了可演示、可复现、可量化分析的课程提交版本。
 
 ## 目录结构与文件说明
 
@@ -22,7 +22,10 @@ tracker_project/
 │   ├── TEST_COMMANDS.md                       # 板端部署、运行、硬件检查、主线测试和创新点验证命令
 │   ├── wiring_table.xlsx                      # OrangePi、PCA9685、舵机、电源和摄像头详细接线表
 │   ├── assets/                                # README 引用的接线图、网页截图、曲线图和 benchmark 图片
-│   └── 报告/                                  # 可编辑报告工程、LaTeX 源码、图片素材和模板文件
+│   └── 报告/                                  # 可编辑报告工程、LaTeX 源码、报告图片、演示视频和模板文件
+│       ├── media/images/                      # 报告与 README 使用的实物接线、网页、手势和运行截图
+│       ├── media/videos/                      # 模拟运行、真实跟踪、扩展模块和答辩演示视频
+│       └── orange_pi_tracker_report/          # LaTeX 报告工程，可直接在 TeXstudio 中打开 main.tex
 ├── scripts/
 │   ├── run/                                   # OrangePi 端一键运行脚本，覆盖环境检查、硬件检查和主线运行
 │   ├── analyze_tracking_logs.py               # 分析 logs，生成 FPS、中心误差、舵机角度等统计结果
@@ -46,6 +49,8 @@ tracker_project/
 - 完整命令文档：[docs/TEST_COMMANDS.md](docs/TEST_COMMANDS.md)
 - 硬件接线表：[docs/wiring_table.xlsx](docs/wiring_table.xlsx)
 - 可编辑报告工程：[docs/报告/orange_pi_tracker_report](docs/报告/orange_pi_tracker_report)
+- 本地图片素材：[docs/报告/media/images](docs/报告/media/images)
+- 本地演示视频：[docs/报告/media/videos](docs/报告/media/videos)
 
 ## 效果预览
 
@@ -56,6 +61,12 @@ tracker_project/
 | FPS 曲线 | 中心误差曲线 | 云台角度曲线 |
 | --- | --- | --- |
 | ![FPS 曲线](docs/assets/fps_curve.jpg) | ![中心误差曲线](docs/assets/center_error_curve.jpg) | ![云台角度曲线](docs/assets/gimbal_angle_curve.jpg) |
+
+| 手势识别 | 指尖跟踪 | OK 复位 |
+| --- | --- | --- |
+| ![手势识别](docs/报告/media/images/gesture_five_detection.png) | ![指尖跟踪](docs/报告/media/images/gesture_fingertip_tracking.png) | ![OK 复位](docs/报告/media/images/gesture_ok_reset.png) |
+
+本地视频素材已按功能整理：`demo_step03_simulation.mp4` 为网页模拟模式，`demo_step04_tracking.mp4` 为真实闭环跟踪，`demo_modules_extended.mp4` 为扩展模块综合演示，`demo_final_defense.mp4` 为最终答辩演示视频。
 
 ## 硬件配置
 
@@ -151,9 +162,9 @@ bash scripts/run/07_mock_cloud_upload.sh
 
 系统实现角度限位、单帧限幅、死区抑制、急停、平滑复位、PWM 释放和启动不乱动等保护机制，降低舵机持续顶死、突然大幅运动和复位卡顿风险。
 
-### 创新点 6：手势识别与运动可视化
+### 创新点 6：手势识别、指尖跟踪与运动可视化
 
-系统扩展了手势识别、光流箭头、轨迹回放、区域热力图、画面质量指标和事件日志展示，使网页控制台能够呈现目标运动过程和系统状态。手势识别优先使用 MediaPipe Hands，依赖不可用时回退到传统轮廓方案。
+系统扩展了手势识别、指尖云台跟踪、光流箭头、轨迹回放、区域热力图、画面质量指标和事件日志展示，使网页控制台能够呈现目标运动过程和系统状态。手势识别优先使用 MediaPipe Hands，依赖不可用时回退到传统轮廓方案；开启手势识别后，连续识别到 `one` 手势会进入指尖跟踪模式，云台以食指尖关键点为目标使其靠近画面中心，连续识别到 `ok` 后停止该模式并执行安全复位。
 
 ## 实验结果
 

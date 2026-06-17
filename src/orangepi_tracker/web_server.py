@@ -492,7 +492,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function updateStatus(data) {
-      var runState = data.emergency_stop ? "STOP" : (data.tracking_enabled ? "RUNNING" : (data.color_ready ? "READY" : "NEED_CALIBRATE"));
+      var runState = data.emergency_stop ? "STOP" : (data.gesture_tracking_enabled ? "FINGERTIP" : (data.tracking_enabled ? "RUNNING" : (data.color_ready ? "READY" : "NEED_CALIBRATE")));
       $("state").textContent = String(data.state || "-") + " / " + runState;
       $("fps").textContent = String(data.fps == null ? "-" : data.fps);
       $("target").textContent = data.target_found ? "FOUND" : "LOST";
