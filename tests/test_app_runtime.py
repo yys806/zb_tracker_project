@@ -334,6 +334,27 @@ class ApplicationRuntimeTests(unittest.TestCase):
         self.assertFalse(app.hold_locked)
         self.assertGreater(len(app.hardware.moves), 3)
 
+    def test_low_confidence_detection_does_not_drive_servos(self) -> None:
+        with (
+            patch.object(app_module, "OpenCVCamera", return_value=FakeCamera()),
+            patch.object(app_module, "create_hardware", side_effect=lambda hardware, control: CountingHardware(control)),
+        ):
+            app = app_module.TrackingApplication(self.make_config())
+        app.set_color("red")
+        app.start_tracking()
+        app.tracker.detect = lambda frame: TargetDetection(
+            found=True,
+            center_x=145,
+            center_y=105,
+            bbox=(135, 95, 20, 20),
+            area=35,
+            confidence=0.12,
+        )
+
+        app._process_frame(np.zeros((120, 160, 3), dtype=np.uint8), 1.0 / 30.0)
+
+        self.assertEqual(app.hardware.moves, [])
+
     def test_tilt_moves_fast_then_quiets_near_center(self) -> None:
         with (
             patch.object(app_module, "OpenCVCamera", return_value=FakeCamera()),
@@ -419,6 +440,7 @@ class ApplicationRuntimeTests(unittest.TestCase):
     def test_flow_status_is_exposed_in_console_snapshot(self) -> None:
         app = self.make_app()
         app.tracking_enabled = True
+        app.set_flow_enabled(True)
         app.last_flow.motion_detected = True
         app.last_flow.active_points = 8
         app.last_flow.total_points = 20
@@ -432,6 +454,45 @@ class ApplicationRuntimeTests(unittest.TestCase):
         self.assertIn("flow", console)
         self.assertIn("flow_time_ms", console)
         self.assertTrue(console["flow"]["enabled"])
+
+    def test_flow_is_disabled_by_default_for_low_latency_tracking(self) -> None:
+        app = self.make_app()
+
+        self.assertFalse(app.flow_analyzer.enabled)
+        status = app.get_flow_status()
+        self.assertFalse(status["enabled"])
+
+        app._process_frame(np.zeros((120, 160, 3), dtype=np.uint8), 1.0 / 30.0)
+
+        self.assertFalse(app.last_flow.enabled)
+        self.assertFalse(app.last_flow.has_flow)
+
+    def test_flow_toggle_enables_optional_flow_processing(self) -> None:
+        app = self.make_app()
+
+        enabled = app.set_flow_enabled(True)
+
+        self.assertTrue(app.flow_analyzer.enabled)
+        self.assertTrue(enabled["flow"]["enabled"])
+        self.assertIn("flow enabled", enabled["message"])
+
+    def test_search_motion_sweeps_pan_only_and_holds_tilt(self) -> None:
+        with (
+            patch.object(app_module, "OpenCVCamera", return_value=FakeCamera()),
+            patch.object(app_module, "create_hardware", side_effect=lambda hardware, control: CountingHardware(control)),
+        ):
+            app = app_module.TrackingApplication(self.make_config())
+        app.config.state_machine.enable_search = True
+        app.controller.current_pan = 90.0
+        app.controller.current_tilt = 110.0
+        app._begin_search()
+
+        for _ in range(4):
+            app._apply_search_motion()
+
+        self.assertTrue(app.hardware.moves)
+        self.assertTrue(any(pan != 90.0 for pan, _ in app.hardware.moves))
+        self.assertTrue(all(tilt == 110.0 for _, tilt in app.hardware.moves))
 
     def test_gesture_toggle_is_exposed_in_console_snapshot(self) -> None:
         app = self.make_app()

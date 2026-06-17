@@ -28,11 +28,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="覆盖配置文件中的视觉形态学后端",
     )
-    parser.add_argument("--web-host", default="0.0.0.0", help="网页监控绑定地址")
-    parser.add_argument("--web-port", type=int, default=5000, help="网页监控端口")
+    parser.add_argument("--web-host", default="0.0.0.0", help="网页控制台绑定地址")
+    parser.add_argument("--web-port", type=int, default=5000, help="网页控制台端口")
     parser.add_argument("--web-jpeg-quality", type=int, default=70, help="网页视频 JPEG 质量")
     parser.add_argument("--web-fps", type=float, default=30.0, help="网页视频推流帧率")
-    parser.add_argument("--camera-index", type=int, default=None, help="override OpenCV camera index")
+    parser.add_argument("--camera-index", type=int, default=None, help="覆盖 OpenCV 摄像头编号")
     return parser.parse_args()
 
 

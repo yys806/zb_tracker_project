@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import cv2
 
 
-WEB_CONSOLE_VERSION = "v33-gesture-only"
+WEB_CONSOLE_VERSION = "v31-tracking-ui"
 
 
 INDEX_HTML = """<!doctype html>
@@ -45,23 +45,20 @@ INDEX_HTML = """<!doctype html>
         linear-gradient(135deg, #060b0a, var(--bg));
       color: var(--text);
     }
-    main { width: min(1320px, calc(100vw - 28px)); margin: 0 auto; padding: 24px 0 32px; }
+    main { width: min(1440px, calc(100vw - 28px)); margin: 0 auto; padding: 20px 0 28px; }
     header { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 18px; }
     h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 3.4rem); letter-spacing: -0.05em; }
     p { margin: 8px 0 0; color: var(--muted); line-height: 1.65; }
     .badge { border: 1px solid rgba(242, 184, 75, 0.45); border-radius: 999px; color: var(--accent); padding: 8px 14px; white-space: nowrap; background: rgba(242, 184, 75, 0.08); }
-    .grid { display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+    .grid { display: grid; grid-template-columns: minmax(640px, 1fr) minmax(340px, 390px); gap: 16px; align-items: start; }
     .frame, .panel { border: 1px solid var(--line); border-radius: 24px; background: var(--panel); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32); overflow: hidden; }
-    .frame img { display: block; width: 100%; height: auto; background: #050807; }
-    .left-column { display: contents; }
-    .frame { order: 1; }
-    .panel { order: 2; padding: 16px; }
-    .insight-grid { order: 3; }
-    .grid > .insight-box, .left-column > .insight-box { order: 4; }
-    .panel h2 { margin: 18px 0 12px; font-size: 1rem; color: var(--accent); }
+    .frame img { display: block; width: 100%; height: auto; max-height: calc(100vh - 150px); object-fit: contain; background: #050807; }
+    .left-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .panel { padding: 14px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+    .panel h2 { margin: 14px 0 10px; font-size: 0.98rem; color: var(--accent); }
     .panel h2:first-child { margin-top: 0; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
-    .stat { border-radius: 16px; background: var(--panel-2); padding: 12px; min-height: 68px; }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 12px; }
+    .stat { border-radius: 12px; background: var(--panel-2); padding: 10px; min-height: 62px; }
     .stat span { display: block; color: var(--muted); font-size: 0.78rem; }
     .stat strong { display: block; margin-top: 6px; font-size: 1.16rem; overflow-wrap: anywhere; }
     .button-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
@@ -73,7 +70,7 @@ INDEX_HTML = """<!doctype html>
     button.primary { background: rgba(242,184,75,0.16); color: var(--accent); }
     button.danger { background: rgba(255,107,95,0.15); color: var(--danger); }
     button.safe { background: rgba(94,230,168,0.12); color: var(--ok); }
-    .hsv-readout { border-radius: 16px; background: var(--panel-2); padding: 12px; margin: 10px 0 14px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, "Courier New", monospace; font-size: 0.86rem; line-height: 1.55; }
+    .hsv-readout { border-radius: 12px; background: var(--panel-2); padding: 10px; margin: 10px 0 12px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, "Courier New", monospace; font-size: 0.82rem; line-height: 1.45; max-height: 86px; overflow: auto; }
     .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin: 10px 0 14px; }
     .metric-box { border-radius: 16px; background: var(--panel-2); padding: 12px; }
     .metric-box h3 { margin: 0 0 10px; font-size: 0.92rem; color: var(--blue); }
@@ -89,10 +86,14 @@ INDEX_HTML = """<!doctype html>
     .ai-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
     .ai-output { min-height: 118px; white-space: pre-wrap; color: var(--muted); line-height: 1.55; font-size: 0.9rem; }
     .message { color: var(--muted); min-height: 1.4em; margin-top: 12px; overflow-wrap: anywhere; }
+    .warning { border: 1px solid rgba(242,184,75,0.35); border-radius: 12px; background: rgba(242,184,75,0.10); color: var(--accent); padding: 10px; margin-top: 10px; min-height: 40px; line-height: 1.45; }
+    .advanced-section { margin-top: 16px; }
+    .advanced-section h2 { color: var(--accent); margin: 18px 0 10px; font-size: 1rem; }
+    .advanced-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
     .tips { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
     .tip { border-radius: 18px; background: rgba(255, 255, 255, 0.06); padding: 14px 16px; color: var(--muted); }
     code { color: var(--accent); }
-    @media (max-width: 960px) { header { align-items: start; flex-direction: column; } .metric-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 980px) { header { align-items: start; flex-direction: column; } .grid { grid-template-columns: 1fr; } .panel { position: static; max-height: none; } .metric-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -102,7 +103,7 @@ INDEX_HTML = """<!doctype html>
         <h1>OrangePi 云台控制台</h1>
         <p>把目标卡片放在画面中心，点击中心自动标定。标定成功后再开始跟踪；启动后默认不会自动动舵机。</p>
       </div>
-        <div class="badge">Auto HSV + Gesture · v33-gesture-only</div>
+        <div class="badge">Auto HSV + Gesture · v31-tracking-ui</div>
     </header>
     <section class="grid">
       <div class="left-column">
@@ -146,9 +147,10 @@ INDEX_HTML = """<!doctype html>
           <div class="stat"><span>FPS</span><strong id="fps">-</strong></div>
           <div class="stat"><span>目标</span><strong id="target">-</strong></div>
           <div class="stat"><span>pan / tilt</span><strong id="angles">-</strong></div>
-          <div class="stat"><span>面积 / 置信度</span><strong id="quality">-</strong></div>
-          <div class="stat"><span>后端 / 自适应</span><strong id="mode">-</strong></div>
+          <div class="stat"><span>err_x / err_y</span><strong id="errors">-</strong></div>
+          <div class="stat"><span>面积 / 置信度 / Mask</span><strong id="quality">-</strong></div>
         </div>
+        <div class="warning" id="warning">等待状态...</div>
 
         <h2>自动标定</h2>
         <p>只需要中心自动标定。系统会显示当前追踪 HSV，不需要手动调 HSV。</p>
@@ -159,18 +161,32 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="hsv-readout" id="hsvReadout">HSV: -</div>
 
-        <h2>视觉前端</h2>
-        <div class="metric-grid">
-          <div class="metric-box">
-            <h3>HSV 主线</h3>
-            <div class="metric-line"><span>检测方式</span><strong>HSV + OpenCV</strong></div>
-            <div class="metric-line"><span>后端</span><strong id="visionBackend">-</strong></div>
-            <div class="metric-line"><span>目标就绪</span><strong id="visionReady">-</strong></div>
-            <div class="metric-line"><span>自适应 HSV</span><strong id="visionAdaptive">-</strong></div>
-          </div>
+        <h2>云台安全</h2>
+        <div class="button-strip">
+          <form action="/ui/start" method="get">
+            <button class="safe" id="startTracking" type="submit">开始跟踪</button>
+          </form>
+          <form action="/ui/stop" method="get">
+            <button class="danger" id="stop" type="submit">急停</button>
+          </form>
+          <form action="/ui/reset" method="get">
+            <button class="primary" id="reset" type="submit">复位</button>
+          </form>
         </div>
-        <h2>光流扩展台</h2>
-        <div class="metric-grid">
+        <div class="message" id="message">表单控制已可用；如果实时状态不刷新，按钮仍然可以直接控制云台。</div>
+      </aside>
+    </section>
+
+    <section class="advanced-section">
+      <h2>高级诊断</h2>
+      <div class="advanced-grid">
+        <div class="metric-box">
+          <h3>HSV 主线</h3>
+          <div class="metric-line"><span>检测方式</span><strong>HSV + OpenCV</strong></div>
+          <div class="metric-line"><span>后端</span><strong id="visionBackend">-</strong></div>
+          <div class="metric-line"><span>目标就绪</span><strong id="visionReady">-</strong></div>
+          <div class="metric-line"><span>自适应 HSV</span><strong id="visionAdaptive">-</strong></div>
+        </div>
           <div class="metric-box">
             <h3>运动检测</h3>
             <div class="metric-line"><span>状态</span><strong id="flowState">-</strong></div>
@@ -178,7 +194,7 @@ INDEX_HTML = """<!doctype html>
             <div class="metric-line"><span>运动比例</span><strong id="flowRatio">-</strong></div>
             <div class="button-strip" style="margin-top:10px;">
               <form action="/ui/flow-toggle" method="get">
-                <button class="primary" id="flowToggle" type="button">显示光流箭头</button>
+                <button class="primary" id="flowToggle" type="button">开启光流分析</button>
               </form>
             </div>
           </div>
@@ -200,10 +216,6 @@ INDEX_HTML = """<!doctype html>
             <h3>区域热力图</h3>
             <canvas id="heatmapCanvas" class="mini-canvas" width="480" height="180"></canvas>
           </div>
-        </div>
-
-        <h2>手势识别扩展</h2>
-        <div class="metric-grid">
           <div class="metric-box">
             <h3>手势状态</h3>
             <div class="metric-line"><span>开关</span><strong id="gestureEnabled">-</strong></div>
@@ -224,22 +236,7 @@ INDEX_HTML = """<!doctype html>
             <div class="metric-line"><span>缺陷数</span><strong id="gestureDefects">-</strong></div>
             <div class="metric-line"><span>耗时</span><strong id="gestureTime">-</strong></div>
           </div>
-        </div>
-
-        <h2>云台安全</h2>
-        <div class="button-strip">
-          <form action="/ui/start" method="get">
-            <button class="safe" id="startTracking" type="submit">开始跟踪</button>
-          </form>
-          <form action="/ui/stop" method="get">
-            <button class="danger" id="stop" type="submit">急停</button>
-          </form>
-          <form action="/ui/reset" method="get">
-            <button class="primary" id="reset" type="submit">复位</button>
-          </form>
-        </div>
-        <div class="message" id="message">表单控制已可用；如果实时状态不刷新，按钮仍然可以直接控制云台。</div>
-      </aside>
+      </div>
     </section>
     <section class="tips">
       <div class="tip">程序启动后不会自动追踪，也不会自动回中。必须先中心自动标定，再点击开始跟踪。</div>
@@ -474,6 +471,26 @@ INDEX_HTML = """<!doctype html>
       log.innerHTML = html.join("");
     }
 
+    function buildWarning(data) {
+      var notes = [];
+      var tilt = Number(data.tilt);
+      var pan = Number(data.pan);
+      var errY = Number(data.err_y);
+      var errX = Number(data.err_x);
+      var confidence = Number(data.confidence);
+      var maskRatio = Number(data.mask_ratio);
+      if (data.emergency_stop) notes.push("急停已触发");
+      if (data.target_found && !isNaN(tilt) && tilt <= 36 && errY < -30) notes.push("tilt 已到最小角度，无法继续向上追");
+      if (data.target_found && !isNaN(tilt) && tilt >= 144 && errY > 30) notes.push("tilt 已到最大角度，无法继续向下追");
+      if (data.target_found && !isNaN(pan) && pan <= 21 && errX > 30) notes.push("pan 已到左侧限位");
+      if (data.target_found && !isNaN(pan) && pan >= 159 && errX < -30) notes.push("pan 已到右侧限位");
+      if (!isNaN(confidence) && confidence > 0 && confidence < 0.25) notes.push("置信度偏低，舵机暂不跟随");
+      if (!isNaN(maskRatio) && maskRatio > 0.32) notes.push("Mask 过大，背景可能被捕捉");
+      if (data.flow && data.flow.enabled) notes.push("光流分析已开启，可能降低 FPS");
+      if (!notes.length) return "状态正常";
+      return notes.join("；");
+    }
+
     function updateStatus(data) {
       var runState = data.emergency_stop ? "STOP" : (data.tracking_enabled ? "RUNNING" : (data.color_ready ? "READY" : "NEED_CALIBRATE"));
       $("state").textContent = String(data.state || "-") + " / " + runState;
@@ -481,10 +498,11 @@ INDEX_HTML = """<!doctype html>
       $("target").textContent = data.target_found ? "FOUND" : "LOST";
       $("target").style.color = data.target_found ? "var(--ok)" : "var(--danger)";
       $("angles").textContent = String(data.pan == null ? "-" : data.pan) + " / " + String(data.tilt == null ? "-" : data.tilt);
-      $("quality").textContent = String(data.area == null ? "-" : data.area) + " / " + String(data.confidence == null ? "-" : data.confidence);
-        $("mode").textContent = String(data.backend || "-") + " / " + (data.adaptive_hsv_enabled ? "AUTO" : "FIXED") + (data.stale ? " / STALE" : "");
+      $("errors").textContent = String(data.err_x == null ? "-" : data.err_x) + " / " + String(data.err_y == null ? "-" : data.err_y);
+      $("quality").textContent = String(data.area == null ? "-" : data.area) + " / " + String(data.confidence == null ? "-" : data.confidence) + " / " + String(data.mask_ratio == null ? "-" : data.mask_ratio);
+      $("warning").textContent = buildWarning(data);
       $("hsvReadout").textContent = formatHsv(data.hsv_ranges);
-      $("message").textContent = data.message || "";
+      $("message").textContent = data.vision_message || data.message || "";
       updateQuality(data);
       updateEventLog(data.events);
       if (data.flow) {
@@ -496,7 +514,7 @@ INDEX_HTML = """<!doctype html>
         $("flowMedian").textContent = String(data.flow.median_magnitude == null ? "-" : data.flow.median_magnitude);
         $("flowMax").textContent = String(data.flow.max_magnitude == null ? "-" : data.flow.max_magnitude);
         $("flowVector").textContent = "(" + String(data.flow.mean_dx == null ? "-" : data.flow.mean_dx) + ", " + String(data.flow.mean_dy == null ? "-" : data.flow.mean_dy) + ")";
-        $("flowToggle").textContent = data.flow.draw_vectors ? "隐藏光流箭头" : "显示光流箭头";
+        $("flowToggle").textContent = data.flow.enabled ? "关闭光流分析" : "开启光流分析";
       }
       if (data.motion) {
         $("motionSpeed").textContent = String(data.motion.speed_px_s == null ? "-" : data.motion.speed_px_s) + " px/s";
@@ -737,7 +755,7 @@ class MjpegHandler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/reset":
                 status = app.reset_gimbal()
             elif parsed.path == "/api/flow-toggle":
-                status = app.set_flow_vectors_visible(not app.flow_vectors_visible)
+                status = app.set_flow_enabled(not app.flow_analyzer.enabled)
             elif parsed.path == "/api/gesture-toggle":
                 status = app.set_gesture_enabled(not app.config.gesture.enabled)
             elif parsed.path == "/api/ai/analyze":
@@ -760,7 +778,7 @@ class MjpegHandler(BaseHTTPRequestHandler):
             self._send_html(f"<pre>{html_escape(str(exc))}</pre>", status=400)
 
     def _toggle_flow_vectors(self):
-        return self.server.app.set_flow_vectors_visible(not self.server.app.flow_vectors_visible)
+        return self.server.app.set_flow_enabled(not self.server.app.flow_analyzer.enabled)
 
     def _toggle_gesture(self):
         app = self.server.app

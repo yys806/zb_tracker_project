@@ -161,16 +161,24 @@ class ControlTests(unittest.TestCase):
         config = load_config(os.path.join(PROJECT_ROOT, "configs", "default_config.json"))
 
         self.assertEqual(config.control.tilt_direction, 1.0)
-        self.assertAlmostEqual(config.control.tilt_kp, 0.16)
+        self.assertAlmostEqual(config.control.tilt_kp, 0.11)
         self.assertAlmostEqual(config.control.tilt_kd, 0.0)
-        self.assertAlmostEqual(config.control.tilt_max_step_deg, 5.0)
-        self.assertAlmostEqual(config.control.tilt_smoothing, 0.22)
-        self.assertAlmostEqual(config.control.tilt_deadzone_px, 18.0)
+        self.assertAlmostEqual(config.control.tilt_max_step_deg, 3.5)
+        self.assertAlmostEqual(config.control.tilt_smoothing, 0.32)
+        self.assertAlmostEqual(config.control.tilt_deadzone_px, 24.0)
         self.assertAlmostEqual(config.control.tilt_min_delta_deg, 0.25)
-        self.assertAlmostEqual(config.control.tilt_hold_enter_px, 24.0)
-        self.assertAlmostEqual(config.control.tilt_hold_release_px, 36.0)
-        self.assertEqual(config.control.tilt_settle_frames, 3)
-        self.assertAlmostEqual(config.control.tilt_settle_release_px, 70.0)
+        self.assertAlmostEqual(config.control.tilt_hold_enter_px, 26.0)
+        self.assertAlmostEqual(config.control.tilt_hold_release_px, 34.0)
+        self.assertEqual(config.control.tilt_settle_frames, 1)
+        self.assertAlmostEqual(config.control.tilt_settle_release_px, 45.0)
+
+    def test_default_config_uses_faster_pan_profile(self) -> None:
+        config = load_config(os.path.join(PROJECT_ROOT, "configs", "default_config.json"))
+
+        self.assertAlmostEqual(config.control.pan_kp, 0.055)
+        self.assertAlmostEqual(config.control.pan_max_step_deg, 5.5)
+        self.assertAlmostEqual(config.control.pan_smoothing, 0.25)
+        self.assertAlmostEqual(config.control.pan_deadzone_px, 30.0)
 
     def test_tilt_hysteresis_holds_small_vertical_jitter_near_center(self) -> None:
         self.config.tilt_deadzone_px = 18.0

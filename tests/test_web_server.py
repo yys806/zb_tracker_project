@@ -57,7 +57,7 @@ class WebServerMarkupTests(unittest.TestCase):
         html = INDEX_HTML.decode("utf-8")
 
         self.assertEqual(html.count("<button "), 9)
-        for label in ("中心自动标定", "开始跟踪", "急停", "复位", "显示光流箭头"):
+        for label in ("中心自动标定", "开始跟踪", "急停", "复位", "开启光流分析"):
             self.assertIn(label, html)
         for label in ("状态解释", "视觉解释", "异常诊断"):
             self.assertIn(label, html)

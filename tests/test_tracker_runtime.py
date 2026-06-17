@@ -194,6 +194,58 @@ class TrackerRuntimeTests(unittest.TestCase):
         self.assertGreaterEqual(config.tracker.adaptive_sv_margin, 105)
         self.assertTrue(any((item["upper"][0] - item["lower"][0]) >= 18 for item in ranges))
 
+    def test_red_calibration_raises_sv_floor_to_reject_warm_background(self) -> None:
+        config = load_config(os.path.join(PROJECT_ROOT, "configs", "default_config.json"))
+        tracker = HSVColorTracker(config.tracker)
+        frame = np.full((160, 200, 3), (65, 120, 150), dtype=np.uint8)
+        frame[55:105, 75:125] = (0, 0, 220)
+
+        ranges = tracker.calibrate_from_frame(frame, roi_size=48)
+
+        self.assertTrue(any(item["lower"][0] <= 8 or item["upper"][0] >= 172 for item in ranges))
+        self.assertTrue(all(item["lower"][1] >= 70 for item in ranges))
+        self.assertTrue(all(item["lower"][2] >= 60 for item in ranges))
+
+    def test_green_calibration_keeps_bright_value_ceiling(self) -> None:
+        config = load_config(os.path.join(PROJECT_ROOT, "configs", "default_config.json"))
+        tracker = HSVColorTracker(config.tracker)
+        frame = np.full((160, 200, 3), (24, 90, 24), dtype=np.uint8)
+        frame[60:100, 80:120] = (20, 130, 20)
+
+        ranges = tracker.calibrate_from_frame(frame, roi_size=40)
+
+        self.assertEqual(len(ranges), 1)
+        self.assertGreaterEqual(ranges[0]["lower"][0], 35)
+        self.assertLessEqual(ranges[0]["upper"][0], 90)
+        self.assertGreaterEqual(ranges[0]["lower"][1], 55)
+        self.assertEqual(ranges[0]["upper"][2], 255)
+
+    def test_rejects_detection_when_mask_covers_too_much_frame(self) -> None:
+        config = load_config(os.path.join(PROJECT_ROOT, "configs", "default_config.json"))
+        tracker = HSVColorTracker(config.tracker)
+        frame = np.full((160, 200, 3), (65, 120, 150), dtype=np.uint8)
+        tracker.set_hsv_ranges([{"lower": [0, 25, 25], "upper": [32, 255, 255]}])
+
+        detection = tracker.detect(frame)
+
+        self.assertFalse(detection.found)
+        self.assertGreater(detection.mask_ratio, 0.3)
+        self.assertIn("background", detection.message)
+
+    def test_first_detection_prefers_candidate_near_calibration_center(self) -> None:
+        config = load_config(os.path.join(PROJECT_ROOT, "configs", "default_config.json"))
+        tracker = HSVColorTracker(config.tracker)
+        frame = np.zeros((160, 200, 3), dtype=np.uint8)
+        frame[55:105, 75:125] = (0, 0, 220)
+        frame[12:52, 162:198] = (0, 0, 220)
+
+        tracker.calibrate_from_frame(frame, roi_size=48)
+        detection = tracker.detect(frame)
+
+        self.assertTrue(detection.found)
+        self.assertAlmostEqual(detection.center_x, 100, delta=8)
+        self.assertAlmostEqual(detection.center_y, 80, delta=8)
+
 
 if __name__ == "__main__":
     unittest.main()

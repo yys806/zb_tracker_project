@@ -28,6 +28,7 @@ LOCK_HOLD_CENTER_FACTOR = 2.0
 LOCK_HOLD_RELEASE_PX = 22.0
 LOCK_HOLD_MOTION_PX = 6.0
 SERVO_MOVE_EPSILON_DEG = 1e-4
+MIN_CONFIDENCE_FOR_SERVO = 0.25
 
 
 class TrackingApplication:
@@ -38,7 +39,7 @@ class TrackingApplication:
         self.tracker = HSVColorTracker(config.tracker)
         self.gesture_recognizer = GestureRecognizer(config.gesture)
         self.controller = GimbalController(config.control)
-        self.flow_analyzer = OpticalFlowAnalyzer(enabled=True, use_dense_flow=True, draw_vectors=False)
+        self.flow_analyzer = OpticalFlowAnalyzer(enabled=False, use_dense_flow=True, draw_vectors=False)
         self.motion_analyzer = MotionAnalyzer(enabled=True)
         self.quality_analyzer = FrameQualityAnalyzer(enabled=True)
         self.ai_client = DeepSeekClient()
@@ -67,7 +68,7 @@ class TrackingApplication:
         self.last_fps = 0.0
         self.last_detect_ms = 0.0
         self.last_control_ms = 0.0
-        self.last_flow = FlowMetrics(enabled=True)
+        self.last_flow = FlowMetrics(enabled=False)
         self.last_flow_ms = 0.0
         self.flow_vectors_visible = False
         self.last_gesture = GestureDetection(enabled=config.gesture.enabled)
@@ -292,7 +293,14 @@ class TrackingApplication:
             self.emergency_stop = False
             self._reset_state_machine()
             self._reset_hold_lock()
-            self.last_message = "auto calibrated from center target; click start tracking"
+            calibration_detection = self.tracker.detect(self.last_raw_frame)
+            self.last_detection = calibration_detection
+            if calibration_detection.message:
+                self.last_message = calibration_detection.message
+            elif calibration_detection.found:
+                self.last_message = "auto calibrated from center target; click start tracking"
+            else:
+                self.last_message = "auto calibrated, but target is not stable yet; clean the background or recalibrate"
             self._push_event("calibrate", self.last_message)
             return self.get_console_status()
 
@@ -338,6 +346,8 @@ class TrackingApplication:
             "target_found": detection.found,
             "area": round(detection.area, 2),
             "confidence": round(detection.confidence, 3),
+            "mask_ratio": round(detection.mask_ratio, 4),
+            "vision_message": detection.message,
             "bbox": detection.bbox,
             "color_name": self.tracker.color_name,
             "available_colors": self.tracker.available_colors(),
@@ -410,6 +420,8 @@ class TrackingApplication:
             "target_found": False,
             "area": 0.0,
             "confidence": 0.0,
+            "mask_ratio": 0.0,
+            "vision_message": "",
             "bbox": None,
                 "color_name": self.tracker.color_name,
                 "available_colors": self.tracker.available_colors(),
@@ -461,7 +473,8 @@ class TrackingApplication:
 
         if self.tracking_enabled and not self.emergency_stop and detection.found:
             self.was_searching = False
-            if not self._should_hold_lock(frame.shape[1], frame.shape[0], detection):
+            confidence_allows_motion = detection.confidence <= 0.0 or detection.confidence >= MIN_CONFIDENCE_FOR_SERVO
+            if confidence_allows_motion and not self._should_hold_lock(frame.shape[1], frame.shape[0], detection):
                 before_pan = self.controller.current_pan
                 before_tilt = self.controller.current_tilt
                 control_output = self.controller.update(frame.shape[1], frame.shape[0], detection.center_x, detection.center_y, dt)
@@ -566,6 +579,17 @@ class TrackingApplication:
             self.last_message = f"flow vectors {'enabled' if self.flow_vectors_visible else 'disabled'}"
             return self.get_console_status()
 
+    def set_flow_enabled(self, enabled: bool) -> dict:
+        with self.lock:
+            self.flow_analyzer.enabled = bool(enabled)
+            self.flow_vectors_visible = bool(enabled)
+            self.flow_analyzer.reset()
+            self.last_flow = FlowMetrics(enabled=bool(enabled))
+            self.last_flow_ms = 0.0
+            self.last_message = f"flow {'enabled' if enabled else 'disabled'}"
+            self._push_event("flow", self.last_message)
+            return self.get_console_status()
+
     def set_gesture_enabled(self, enabled: bool) -> dict:
         with self.lock:
             self.gesture_recognizer.set_enabled(enabled)
@@ -642,6 +666,8 @@ class TrackingApplication:
                     target_found=detection.found,
                     area=detection.area,
                     confidence=detection.confidence,
+                    mask_ratio=detection.mask_ratio,
+                    bbox=detection.bbox,
                 )
             )
 
@@ -689,25 +715,16 @@ class TrackingApplication:
     def _apply_search_motion(self) -> None:
         step = self.config.state_machine.search_step_deg
         pan_span = max(1.0, self.config.state_machine.search_pan_span)
-        tilt_span = max(1.0, pan_span / 2.0)
         min_pan = max(self.config.control.pan_min, self.search_origin - pan_span)
         max_pan = min(self.config.control.pan_max, self.search_origin + pan_span)
-        min_tilt = max(self.config.control.tilt_min, self.search_tilt_origin - tilt_span)
-        max_tilt = min(self.config.control.tilt_max, self.search_tilt_origin + tilt_span)
 
         next_pan = self.controller.current_pan + self.search_direction * step
-        next_tilt = self.controller.current_tilt + self.search_tilt_direction * step
 
         if next_pan >= max_pan or next_pan <= min_pan:
             self.search_direction *= -1.0
             next_pan = max(min_pan, min(max_pan, next_pan))
 
-        if next_tilt >= max_tilt or next_tilt <= min_tilt:
-            self.search_tilt_direction *= -1.0
-            next_tilt = max(min_tilt, min(max_tilt, next_tilt))
-
         self.controller.current_pan = next_pan
-        self.controller.current_tilt = next_tilt
         self.hardware.move_to(self.controller.current_pan, self.controller.current_tilt)
 
     def _reset_hold_lock(self) -> None:

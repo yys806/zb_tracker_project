@@ -18,6 +18,8 @@ class TargetDetection:
     area: float = 0.0
     confidence: float = 0.0
     mask: Optional[np.ndarray] = None
+    mask_ratio: float = 0.0
+    message: str = ""
 
 
 @dataclass(slots=True)
@@ -107,6 +109,8 @@ class FrameMetrics:
     target_found: bool
     area: float = 0.0
     confidence: float = 0.0
+    mask_ratio: float = 0.0
+    bbox: Optional[BBox] = None
 
 
 @dataclass(slots=True)

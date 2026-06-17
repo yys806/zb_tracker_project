@@ -12,6 +12,11 @@ from .types import TargetDetection
 
 MorphologyFn = Callable[[np.ndarray, int], np.ndarray]
 HSV_LIMITS = ((0, 180), (0, 255), (0, 255))
+MAX_MASK_RATIO_FOR_TRACKING = 0.32
+RED_HUE_MARGIN_LIMIT = 12
+RED_MIN_S = 70
+RED_MIN_V = 55
+GREEN_MIN_S = 55
 
 
 @dataclass(slots=True)
@@ -182,6 +187,8 @@ class HSVColorTracker:
         self.last_area: float = 0.0
         self.last_confidence: float = 0.0
         self.last_mask: np.ndarray | None = None
+        self.calibration_center: tuple[float, float] | None = None
+        self.calibration_frame_size: tuple[int, int] | None = None
         self.missed_frames = 0
         if self.config.color_name in self.config.color_presets:
             self.set_color(self.config.color_name)
@@ -202,6 +209,8 @@ class HSVColorTracker:
             raise ValueError(f"unknown color preset: {color_name}")
         self.config.color_name = color_name
         self.config.hsv_ranges = copy_hsv_ranges(self.config.color_presets[color_name])
+        self.calibration_center = None
+        self.calibration_frame_size = None
         self.reset_tracking_memory()
 
     def set_hsv_ranges(self, ranges: list[dict[str, list[int]]], color_name: str = "custom") -> None:
@@ -211,6 +220,8 @@ class HSVColorTracker:
         self.config.color_name = color_name
         self.config.hsv_ranges = normalized
         self.config.color_presets[color_name] = copy_hsv_ranges(normalized)
+        self.calibration_center = None
+        self.calibration_frame_size = None
         self.reset_tracking_memory()
 
     def reset_tracking_memory(self) -> None:
@@ -235,10 +246,21 @@ class HSVColorTracker:
             saturated = pixels
         median = np.median(saturated, axis=0).astype(int)
         h = int(median[0])
+        red_like = h <= 18 or h >= 162
+        green_like = 35 <= h <= 90
+        if red_like:
+            hue_margin = min(hue_margin, RED_HUE_MARGIN_LIMIT)
+            sv_margin = min(sv_margin, 50)
+            min_s = max(min_s, RED_MIN_S)
+            min_v = max(min_v, RED_MIN_V)
+        elif green_like:
+            min_s = max(min_s, GREEN_MIN_S)
         s_low = int(max(min_s, np.percentile(saturated[:, 1], 5) - sv_margin))
         v_low = int(max(min_v, np.percentile(saturated[:, 2], 5) - sv_margin * 1.3))
         s_high = int(min(255, np.percentile(saturated[:, 1], 98) + sv_margin))
         v_high = int(min(255, np.percentile(saturated[:, 2], 98) + sv_margin))
+        if green_like:
+            v_high = 255
         hue_margin = max(1, int(hue_margin))
 
         if h - hue_margin < 0:
@@ -296,6 +318,8 @@ class HSVColorTracker:
         pixels = hsv.reshape(-1, 3)
         ranges = self._ranges_from_hsv_pixels(pixels, hue_margin, sv_margin, min_s=25, min_v=25)
         self.set_hsv_ranges(ranges, color_name="custom")
+        self.calibration_center = (float(cx), float(cy))
+        self.calibration_frame_size = (width, height)
         return self.hsv_ranges
 
     def _adapt_hsv_from_detection(self, frame: np.ndarray, bbox: tuple[int, int, int, int], confidence: float, area: float) -> None:
@@ -348,9 +372,7 @@ class HSVColorTracker:
     def _should_add_red_dominance_mask(self) -> bool:
         if not self.config.red_dominance_enabled:
             return False
-        if self.config.color_name.lower() == "red":
-            return True
-        return any(item["lower"][0] <= 10 or item["upper"][0] >= 165 for item in self.config.hsv_ranges)
+        return self.config.color_name.lower() == "red"
 
     def _candidate_score(
         self,
@@ -364,6 +386,12 @@ class HSVColorTracker:
         score = area * max(0.05, min(1.0, fill_ratio))
         square_score = max(0.25, 1.0 - abs(aspect - 1.0))
         score *= square_score * square_score
+        if self.last_center is None and self.calibration_center is not None:
+            dx = center_x - self.calibration_center[0]
+            dy = center_y - self.calibration_center[1]
+            distance = (dx * dx + dy * dy) ** 0.5
+            inertia = max(float(self.config.selection_inertia_px), 1.0)
+            score /= 1.0 + (distance / inertia) ** 2
         if self.last_center is None:
             return score
         dx = center_x - self.last_center[0]
@@ -443,6 +471,7 @@ class HSVColorTracker:
             area=self.last_area,
             confidence=confidence,
             mask=mask,
+            mask_ratio=float(np.count_nonzero(mask)) / float(mask.size) if mask.size else 0.0,
         )
 
     def detect(self, frame: np.ndarray) -> TargetDetection:
@@ -454,6 +483,16 @@ class HSVColorTracker:
         mask = self._build_mask(hsv, blurred)
         mask = cv2.medianBlur(mask, 3)
         mask = self.backend(mask, self.config.morph_kernel)
+        mask_ratio = float(np.count_nonzero(mask)) / float(mask.size) if mask.size else 0.0
+
+        if mask_ratio > MAX_MASK_RATIO_FOR_TRACKING:
+            self.reset_tracking_memory()
+            return TargetDetection(
+                found=False,
+                mask=mask,
+                mask_ratio=mask_ratio,
+                message="background color interference: mask covers too much of the frame; use a cleaner background or recalibrate",
+            )
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         frame_area = frame.shape[0] * frame.shape[1]
@@ -495,10 +534,11 @@ class HSVColorTracker:
             if held is not None:
                 return held
             self.reset_tracking_memory()
-            return TargetDetection(found=False, mask=mask)
+            return TargetDetection(found=False, mask=mask, mask_ratio=mask_ratio)
 
         confidence = min(1.0, best.area / max(float(self.config.min_area) * 5.0, 1.0))
         detection = self._smooth_detection(best.x, best.y, best.w, best.h, best.center_x, best.center_y, best.area, confidence, mask)
+        detection.mask_ratio = mask_ratio
         if detection.bbox is not None:
             self._adapt_hsv_from_detection(frame, detection.bbox, detection.confidence, detection.area)
         return detection
@@ -519,4 +559,12 @@ class HSVColorTracker:
             ]
             if nearby:
                 return max(nearby, key=lambda candidate: candidate.score)
+        if self.last_center is None and self.calibration_center is not None:
+            calibration_nearby = [
+                candidate
+                for candidate in candidates
+                if ((candidate.center_x - self.calibration_center[0]) ** 2 + (candidate.center_y - self.calibration_center[1]) ** 2) ** 0.5 <= max(jump_limit, float(self.config.selection_inertia_px))
+            ]
+            if calibration_nearby:
+                return max(calibration_nearby, key=lambda candidate: candidate.score)
         return max(candidates, key=lambda candidate: candidate.score)
